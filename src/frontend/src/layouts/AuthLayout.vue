@@ -131,7 +131,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -146,8 +146,33 @@ import {
 const route = useRoute()
 const authStore = useAuthStore()
 
-// State
-const loading = ref(false)
+// Use computed to properly sync loading state with auth store
+const loading = computed(() => authStore.loading)
+
+// Handle bfcache restoration - ensure loading state is reset when page is restored
+const handlePageShow = (event) => {
+  // If page is restored from bfcache (persisted = true), reset loading state
+  if (event.persisted) {
+    console.log('[AuthLayout] Page restored from bfcache, resetting loading state')
+    // Force reset the auth store loading state
+    authStore.loading = false
+  }
+}
+
+onMounted(() => {
+  // Listen for pageshow event to handle bfcache restoration
+  window.addEventListener('pageshow', handlePageShow)
+
+  // Also ensure loading is false on mount (prevents stuck overlay)
+  if (authStore.loading) {
+    console.log('[AuthLayout] Resetting stuck loading state on mount')
+    authStore.loading = false
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pageshow', handlePageShow)
+})
 
 // Computed
 const pageTitle = computed(() => {
@@ -164,11 +189,6 @@ const pageSubtitle = computed(() => {
     Register: 'Join the SE-QPT platform to start your qualification journey'
   }
   return subtitles[route.name] || 'Please authenticate to continue'
-})
-
-// Watch for auth store loading state
-computed(() => {
-  loading.value = authStore.loading
 })
 </script>
 

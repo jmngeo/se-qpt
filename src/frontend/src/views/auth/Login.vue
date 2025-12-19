@@ -75,16 +75,22 @@ const handleLogin = async () => {
       const redirectPath = router.currentRoute.value.query.redirect || '/app/dashboard'
       console.log('Redirecting to:', redirectPath)
 
-      // Force a full page reload to ensure proper layout switching
-      // This is needed because of layout transition from AuthLayout to MainLayout
-      window.location.href = redirectPath
-      console.log('Navigation complete')
+      // Reset loading state BEFORE redirect to prevent overlay from persisting
+      loading.value = false
+
+      // Use setTimeout to ensure all UI updates (toast, loading state) are complete
+      // before triggering the redirect. This prevents browser bfcache from caching
+      // the page with the loading overlay visible.
+      setTimeout(() => {
+        // Use replace() instead of href to prevent bfcache issues
+        window.location.replace(redirectPath)
+      }, 100)
     } else {
       console.error('Login failed - no success in result:', result)
+      loading.value = false
     }
   } catch (error) {
     console.error('Login error:', error)
-  } finally {
     loading.value = false
   }
 }
