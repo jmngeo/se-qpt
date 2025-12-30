@@ -794,3 +794,86 @@ All these changes are uncommitted. Run `git status` to see full list. Key change
 2. Consider committing the routes refactoring
 3. Continue with any pending Phase 2 Task 3 work from BACKLOG.md
 
+
+
+---
+
+## Session: 2025-12-30 - Process Selection/Deselection Feature Implementation
+
+### What Was Implemented
+
+**Feature**: Process Selection/Deselection for Phase 2 Task-Based Assessment (Ulf's Request)
+- Users can now edit LLM-identified ISO processes after task analysis
+- Can deselect false-positive processes via checkboxes
+- Can change involvement levels (Responsible/Supporting/Designing) via dropdown
+- Can add missed processes from "Add More" expandable section with search
+- Can re-analyze tasks with modified descriptions
+
+### Files Modified
+
+**Backend** (`src/backend/app/routes/phase1_roles.py`):
+- Added `GET /api/iso-processes` - Returns all 30 ISO processes with lifecycle grouping
+- Added `POST /api/updateProcessSelection` - Updates user's modified process selection, re-runs stored procedure
+
+**Frontend** (`src/frontend/src/components/phase2/DerikTaskSelector.vue`):
+- Added state variables: `editableProcesses`, `isEditing`, `allIsoProcesses`, `searchQuery`, `hasModifications`, `isConfirming`
+- Added methods: `enterEditMode()`, `fetchAllIsoProcesses()`, `markModified()`, `addProcess()`, `cancelEdit()`, `reAnalyzeTasks()`, `confirmSelection()`
+- Updated template with edit mode UI (checkboxes, dropdowns, "Add More" section)
+- Added styles for edit mode, disabled/modified card states
+
+### Bug Fix Applied
+
+**Issue**: Process name normalization mismatch between LLM output and database
+- LLM returns: "Verification process" (with " process" suffix)
+- Database stores: "Verification" (without suffix)
+- This caused duplicates in "Add More" section
+
+**Fix**: Added `normalizeProcessName()` function in `availableProcesses` computed property to remove " process" suffix before comparison.
+
+### Database Verification
+
+- Confirmed database has all 30 ISO processes (IDs 1-30)
+- `populate_iso_processes.py` is outdated (only 28 processes) but live DB is correct
+- Data flow verified: Process selection -> unknown_role_process_matrix -> stored procedure -> unknown_role_competency_matrix -> Phase2NecessaryCompetencies display
+
+### Outstanding Issues for Next Session
+
+**CRITICAL: Remote Server LLM Issue**
+- Location: Production server (167.71.52.6 / seqpt.jomongeorge.com)
+- Problem: Task-based assessment `/api/findProcesses` endpoint returns FALLBACK results instead of LLM results
+- Impact: LLM-powered process identification not working on production
+- Investigation needed:
+  1. Check if OpenAI API key is configured in production `.env`
+  2. Check if LLM pipeline dependencies are installed (langchain, openai, faiss-cpu)
+  3. Check Flask logs for import errors or API call failures
+  4. May need to rebuild Docker container with updated dependencies
+
+### Git Status
+
+Changes to commit:
+- `src/backend/app/routes/phase1_roles.py` (new endpoints)
+- `src/frontend/src/components/phase2/DerikTaskSelector.vue` (edit mode feature + bug fix)
+- `src/backend/app/routes.py` (deprecated file - has duplicate endpoints, can be cleaned up later)
+
+### Testing Done
+
+- Backend endpoints tested and working locally
+- Frontend edit mode UI functional
+- Data flow verified with database queries
+- Process -> Competency calculation confirmed correct
+
+### Server Credentials (for deployment)
+
+```bash
+# SSH to production
+ssh -i .ssh/zangetsu root@167.71.52.6
+# Passphrase: zangetsu
+
+# Deploy commands
+cd /opt/seqpt
+git pull origin master
+docker compose down
+docker compose up --build -d
+docker compose logs -f
+```
+
