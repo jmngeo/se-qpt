@@ -26,6 +26,7 @@ python-docx==1.2.0
 
 # Vector database for RAG
 chromadb==0.4.21
+faiss-cpu==1.7.4
 
 # Validation and utilities
 pydantic>=2.7.4
