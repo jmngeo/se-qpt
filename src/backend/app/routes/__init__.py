@@ -11,6 +11,7 @@ Blueprint Structure:
 - phase1_strategies_bp: Phase 1 Task 3 - Strategy selection (/phase1/strategies/*)
 - phase2_assessment_bp: Phase 2 Task 1-2 - Competency assessment (/phase2/*, /assessment/*)
 - phase2_learning_bp: Phase 2 Task 3 - Learning objectives (/phase2/learning-objectives/*)
+- phase3_planning_bp: Phase 3 - Macro Planning (/phase3/*)
 - main_bp: Miscellaneous/legacy routes (/, /assessments, /roles, etc.)
 """
 
@@ -123,6 +124,7 @@ from app.routes.phase1_roles import phase1_roles_bp
 from app.routes.phase1_strategies import phase1_strategies_bp
 from app.routes.phase2_assessment import phase2_assessment_bp
 from app.routes.phase2_learning import phase2_learning_bp
+from app.routes.phase3_planning import phase3_planning_bp
 from app.routes.main import main_bp
 
 # Export all blueprints
@@ -134,6 +136,7 @@ __all__ = [
     'phase1_strategies_bp',
     'phase2_assessment_bp',
     'phase2_learning_bp',
+    'phase3_planning_bp',
     'main_bp',
     # Helper functions
     '_initialize_organization_matrices',

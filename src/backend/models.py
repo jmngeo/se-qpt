@@ -151,6 +151,56 @@ class RoleCluster(db.Model):
         }
 
 
+class TrainingProgramCluster(db.Model):
+    """
+    Training Program Clusters for Phase 3 "Macro Planning"
+    =======================================================
+
+    Created: January 2026
+
+    IMPORTANT: These are NOT the same as the 14 SE Role Clusters (role_cluster table).
+
+    Distinction:
+    - 14 SE Role Clusters (role_cluster): Used for competency profile mapping in Phase 1/2
+    - 6 Training Program Clusters (this table): Used for organizing training delivery in Phase 3
+
+    Purpose:
+    - Group organization roles into sensible training cohorts from an organizational perspective
+    - Enable "Role-Clustered Based View" in Phase 3 training structure
+
+    The 6 Training Program Clusters:
+    1. Engineers - Technical practitioners (developers, architects, testers)
+    2. Managers - Mid-level leadership (project managers, team leads)
+    3. Executives - Senior leadership (directors, VPs, C-level)
+    4. Support Staff - Supporting functions (QA, config mgmt, IT support)
+    5. External Partners - Customer/supplier facing roles
+    6. Operations - Production, deployment, and maintenance roles
+
+    Training Program Names:
+    - "SE for Engineers", "SE for Managers", etc.
+    """
+    __tablename__ = 'training_program_cluster'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cluster_key = db.Column(db.String(50), unique=True, nullable=False)
+    cluster_name = db.Column(db.String(100), nullable=False)
+    training_program_name = db.Column(db.String(100), nullable=False)  # e.g., "SE for Engineers"
+    description = db.Column(db.Text)
+    typical_org_roles = db.Column(db.Text)  # JSON array of example organization roles
+    display_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'key': self.cluster_key,
+            'name': self.cluster_name,
+            'training_program_name': self.training_program_name,
+            'description': self.description,
+            'typical_org_roles': json.loads(self.typical_org_roles) if self.typical_org_roles else []
+        }
+
+
 class OrganizationRoleMapping(db.Model):
     """
     AI-Powered Organization Role Mappings to SE-QPT Role Clusters
@@ -191,8 +241,13 @@ class OrganizationRoleMapping(db.Model):
     org_role_responsibilities = db.Column(db.Text)  # JSON array
     org_role_skills = db.Column(db.Text)  # JSON array
 
-    # Mapping to SE role cluster
+    # Mapping to SE role cluster (for competency profile)
     mapped_cluster_id = db.Column(db.Integer, db.ForeignKey('role_cluster.id'), nullable=False)
+
+    # Mapping to Training Program Cluster (for Phase 3 training organization)
+    # Added January 2026 for Phase 3 "Macro Planning"
+    # Note: This is a DIFFERENT concept from mapped_cluster_id (14 SE Role Clusters vs 6 Training Program Clusters)
+    training_program_cluster_id = db.Column(db.Integer, db.ForeignKey('training_program_cluster.id'), nullable=True)
 
     # AI analysis metadata
     confidence_score = db.Column(db.Numeric(5, 2))
@@ -215,10 +270,11 @@ class OrganizationRoleMapping(db.Model):
     # Relationships
     organization = db.relationship('Organization', backref='role_mappings')
     role_cluster = db.relationship('RoleCluster', backref='org_mappings')
+    training_program_cluster = db.relationship('TrainingProgramCluster', backref='org_mappings')
 
     def to_dict(self):
         """Convert to dictionary for JSON serialization"""
-        return {
+        result = {
             'id': self.id,
             'organization_id': self.organization_id,
             'org_role_title': self.org_role_title,
@@ -239,6 +295,18 @@ class OrganizationRoleMapping(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+        # Add Training Program Cluster for Phase 3 (if set)
+        if self.training_program_cluster_id:
+            result['training_program_cluster'] = {
+                'id': self.training_program_cluster_id,
+                'name': self.training_program_cluster.cluster_name if self.training_program_cluster else None,
+                'training_program_name': self.training_program_cluster.training_program_name if self.training_program_cluster else None
+            }
+        else:
+            result['training_program_cluster'] = None
+
+        return result
 
 
 class OrganizationRoles(db.Model):
@@ -278,6 +346,7 @@ class OrganizationRoles(db.Model):
     role_name = db.Column(db.String(255), nullable=False)
     role_description = db.Column(db.Text)
     standard_role_cluster_id = db.Column(db.Integer, db.ForeignKey('role_cluster.id'))
+    training_program_cluster_id = db.Column(db.Integer, db.ForeignKey('training_program_cluster.id'))  # Phase 3
     identification_method = db.Column(db.String(50), default='STANDARD')  # 'STANDARD' or 'CUSTOM' or 'TASK_BASED'
     participating_in_training = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -286,6 +355,7 @@ class OrganizationRoles(db.Model):
     # Relationships
     organization = db.relationship('Organization', backref=db.backref('org_roles', cascade="all, delete-orphan", lazy=True))
     standard_cluster = db.relationship('RoleCluster', backref='organization_role_mappings')
+    training_cluster = db.relationship('TrainingProgramCluster', backref='organization_roles')
 
     __table_args__ = (
         db.UniqueConstraint('organization_id', 'role_name', name='organization_roles_organization_id_role_name_key'),
@@ -305,6 +375,10 @@ class OrganizationRoles(db.Model):
             'standard_role_cluster_id': self.standard_role_cluster_id,
             'standardRoleName': self.standard_cluster.role_cluster_name if self.standard_cluster else None,
             'standard_role_description': self.standard_cluster.role_cluster_description if self.standard_cluster else None,
+            'training_program_cluster_id': self.training_program_cluster_id,  # Phase 3
+            'trainingClusterId': self.training_program_cluster_id,  # Frontend key
+            'trainingClusterName': self.training_cluster.cluster_name if self.training_cluster else None,
+            'trainingProgramName': self.training_cluster.training_program_name if self.training_cluster else None,
             'identificationMethod': self.identification_method,  # Frontend expects this key
             'identification_method': self.identification_method,
             'participating_in_training': self.participating_in_training,
@@ -939,6 +1013,56 @@ class GeneratedLearningObjectives(db.Model):
             'validation_status': self.validation_status,
             'gap_percentage': self.gap_percentage,
             'cached': True  # Flag to indicate this was from cache
+        }
+
+
+class OrganizationExistingTraining(db.Model):
+    """
+    Stores competencies for which organization has existing training programs.
+    These competencies are excluded from LO generation/training requirements.
+
+    Feature: "Check and Integrate Existing Offers" (Ulf's request - 11.12.2025)
+
+    Purpose:
+    - Allow users to mark competencies that already have training in their organization
+    - Excluded competencies move from "Training Requirements Identified" to "No Training Required"
+    - Shows "Training Exists" tag instead of generating new LOs for these
+    - Affects all levels (1, 2, 4) of the selected competency
+
+    Table: organization_existing_trainings
+    """
+    __tablename__ = 'organization_existing_trainings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='CASCADE'),
+                                nullable=False, index=True)
+    competency_id = db.Column(db.Integer, db.ForeignKey('competency.id'), nullable=False)
+
+    # Metadata
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.String(255))  # Username who marked this
+    notes = db.Column(db.Text)  # Optional notes about existing training
+
+    # Relationships
+    organization = db.relationship('Organization', backref=db.backref(
+        'existing_trainings', lazy='dynamic', cascade='all, delete-orphan'
+    ))
+    competency = db.relationship('Competency')
+
+    # Unique constraint: one entry per org-competency pair
+    __table_args__ = (
+        db.UniqueConstraint('organization_id', 'competency_id',
+                           name='unique_org_competency_training'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'organization_id': self.organization_id,
+            'competency_id': self.competency_id,
+            'competency_name': self.competency.competency_name if self.competency else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'notes': self.notes
         }
 
 
