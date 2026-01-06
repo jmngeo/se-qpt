@@ -26,6 +26,8 @@ export function usePhaseProgression() {
       console.log('[usePhaseProgression] Checking phase completion for:', { userId, userRole })
 
       let phase1Complete = false
+      let phase2Complete = false
+      let phase3Complete = false
 
       // For both admins and employees, check database first (source of truth)
       try {
@@ -38,35 +40,44 @@ export function usePhaseProgression() {
 
         const response = await axios.get(`/api/organization/dashboard${params}`)
         phase1Complete = response.data.organization?.phase1_completed || false
+        phase2Complete = response.data.organization?.phase2_completed || false
+        phase3Complete = response.data.organization?.phase3_completed || false
         console.log('[usePhaseProgression] Phase 1 check from database:', phase1Complete)
+        console.log('[usePhaseProgression] Phase 2 check from database:', phase2Complete)
+        console.log('[usePhaseProgression] Phase 3 check from database:', phase3Complete)
         console.log('[usePhaseProgression] Organization data:', response.data.organization)
       } catch (error) {
-        console.warn('[usePhaseProgression] Failed to check organization phase1_completed:', error)
+        console.warn('[usePhaseProgression] Failed to check organization phase completion:', error)
         // Fallback to localStorage check
         const phase1Data = userId
           ? localStorage.getItem(`se-qpt-phase1-data-user-${userId}`) || localStorage.getItem('se-qpt-phase1-data')
           : localStorage.getItem('se-qpt-phase1-data')
         phase1Complete = !!phase1Data
+
+        const phase2Data = userId
+          ? localStorage.getItem(`se-qpt-phase2-data-user-${userId}`) || localStorage.getItem('se-qpt-phase2-data')
+          : localStorage.getItem('se-qpt-phase2-data')
+        phase2Complete = !!phase2Data
+
+        const phase3Data = userId
+          ? localStorage.getItem(`se-qpt-phase3-data-user-${userId}`) || localStorage.getItem('se-qpt-phase3-data')
+          : localStorage.getItem('se-qpt-phase3-data')
+        phase3Complete = !!phase3Data
+
         console.log('[usePhaseProgression] Phase 1 fallback to localStorage:', phase1Complete)
+        console.log('[usePhaseProgression] Phase 2 fallback to localStorage:', phase2Complete)
+        console.log('[usePhaseProgression] Phase 3 fallback to localStorage:', phase3Complete)
       }
 
-      // Check Phase 2-4 from localStorage for all users
-      const phase2Data = userId
-        ? localStorage.getItem(`se-qpt-phase2-data-user-${userId}`) || localStorage.getItem('se-qpt-phase2-data')
-        : localStorage.getItem('se-qpt-phase2-data')
-
-      const phase3Data = userId
-        ? localStorage.getItem(`se-qpt-phase3-data-user-${userId}`) || localStorage.getItem('se-qpt-phase3-data')
-        : localStorage.getItem('se-qpt-phase3-data')
-
+      // Check Phase 4 from localStorage for now (can be migrated to database later)
       const phase4Data = userId
         ? localStorage.getItem(`se-qpt-phase4-data-user-${userId}`) || localStorage.getItem('se-qpt-phase4-data')
         : localStorage.getItem('se-qpt-phase4-data')
 
       phaseCompletionStatus.value = {
         phase1: phase1Complete,
-        phase2: !!phase2Data,
-        phase3: !!phase3Data,
+        phase2: phase2Complete,
+        phase3: phase3Complete,
         phase4: !!phase4Data
       }
 

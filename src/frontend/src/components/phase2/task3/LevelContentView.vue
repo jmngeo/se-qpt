@@ -20,6 +20,10 @@
           <span class="stat-value">{{ notTargetedCount }}</span>
           <span class="stat-label">Not Targeted</span>
         </div>
+        <div class="stat-item training-exists" v-if="trainingExistsCount > 0">
+          <span class="stat-value">{{ trainingExistsCount }}</span>
+          <span class="stat-label">Training Exists</span>
+        </div>
         <div class="stat-item total">
           <span class="stat-value">{{ competencies.length }}</span>
           <span class="stat-label">Total</span>
@@ -221,7 +225,16 @@ const achievedCompetencies = computed(() => {
 const notTargetedCompetencies = computed(() => {
   return props.competencies.filter(c => {
     if (hasSkillGap(c)) return false
+    // Exclude training_exists from not_targeted
+    if (c.status === 'training_exists' || c.has_existing_training) return false
     return c.status === 'not_targeted' || c.target_level === 0
+  })
+})
+
+// Training exists = competencies with existing training in org
+const trainingExistsCompetencies = computed(() => {
+  return props.competencies.filter(c => {
+    return c.status === 'training_exists' || c.has_existing_training === true
   })
 })
 
@@ -229,6 +242,7 @@ const notTargetedCompetencies = computed(() => {
 const trainingNeededCount = computed(() => activeCompetencies.value.length)
 const achievedAtLevelCount = computed(() => achievedCompetencies.value.length)
 const notTargetedCount = computed(() => notTargetedCompetencies.value.length)
+const trainingExistsCount = computed(() => trainingExistsCompetencies.value.length)
 
 // Legacy - keeping for backward compatibility
 const activeCount = computed(() => activeCompetencies.value.length)
@@ -315,6 +329,10 @@ const achievedMessage = computed(() => {
 
 .stat-item.not-targeted {
   background: rgba(144, 147, 153, 0.2);
+}
+
+.stat-item.training-exists {
+  background: rgba(24, 144, 255, 0.25);
 }
 
 .stat-value {

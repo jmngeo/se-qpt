@@ -213,7 +213,7 @@ const routes = [
         path: 'phases/3',
         name: 'PhaseThree',
         component: PhaseThree,
-        meta: { title: 'Phase 3: Module Selection', phase: 3 },
+        meta: { title: 'Phase 3: Macro Planning', phase: 3 },
         beforeEnter: async (to, from, next) => {
           const { checkPhaseCompletion, canAccessPhase, getNextAvailablePhase } = usePhaseProgression()
           await checkPhaseCompletion() // Refresh phase status from database

@@ -342,3 +342,61 @@ def complete_phase1():
         db.session.rollback()
         current_app.logger.error(f"Phase 1 completion error: {str(e)}")
         return jsonify({'error': 'Failed to mark Phase 1 as complete'}), 500
+
+
+@org_bp.route('/organization/phase2-complete', methods=['PUT'])
+@jwt_required()
+def complete_phase2():
+    """Mark Phase 2 as complete for organization (Admin only)"""
+    try:
+        user_id = int(get_jwt_identity())
+        claims = get_jwt()
+
+        if claims.get('role') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+
+        user = User.query.get(user_id)
+        organization = Organization.query.get(user.organization_id)
+
+        if not organization:
+            return jsonify({'error': 'Organization not found'}), 404
+
+        organization.phase2_completed = True
+        db.session.commit()
+
+        current_app.logger.info(f"Phase 2 completed for organization {organization.id}")
+        return jsonify({'organization': organization.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Phase 2 completion error: {str(e)}")
+        return jsonify({'error': 'Failed to mark Phase 2 as complete'}), 500
+
+
+@org_bp.route('/organization/phase3-complete', methods=['PUT'])
+@jwt_required()
+def complete_phase3():
+    """Mark Phase 3 as complete for organization (Admin only)"""
+    try:
+        user_id = int(get_jwt_identity())
+        claims = get_jwt()
+
+        if claims.get('role') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+
+        user = User.query.get(user_id)
+        organization = Organization.query.get(user.organization_id)
+
+        if not organization:
+            return jsonify({'error': 'Organization not found'}), 404
+
+        organization.phase3_completed = True
+        db.session.commit()
+
+        current_app.logger.info(f"Phase 3 completed for organization {organization.id}")
+        return jsonify({'organization': organization.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Phase 3 completion error: {str(e)}")
+        return jsonify({'error': 'Failed to mark Phase 3 as complete'}), 500

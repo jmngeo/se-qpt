@@ -19,7 +19,9 @@ from models import (
     OrganizationPMTContext,
     GeneratedLearningObjectives,
     User,
-    UserAssessment
+    UserAssessment,
+    OrganizationExistingTraining,
+    Competency
 )
 
 # Import Phase 2 Task 3 setup function
@@ -1881,3 +1883,156 @@ def download_pmt_reference_example(filename):
     except Exception as e:
         current_app.logger.error(f"[ERROR] Failed to download PMT example: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==============================================================================
+# EXISTING TRAINING OFFERS ENDPOINTS
+# Feature: "Check and Integrate Existing Offers" (Ulf's request - 11.12.2025)
+# ==============================================================================
+
+@phase2_learning_bp.route('/phase2/existing-trainings/<int:organization_id>', methods=['GET'])
+def api_get_existing_trainings(organization_id):
+    """
+    Get list of competencies marked as having existing training in the organization.
+
+    Returns both the list of excluded competency IDs and the full details,
+    plus all competencies for the selection UI.
+
+    Response:
+        {
+            "success": true,
+            "data": {
+                "existing_training_competencies": [1, 5, 7],
+                "existing_trainings_detail": [...],
+                "all_competencies": [...]
+            }
+        }
+    """
+    try:
+        # Validate organization exists
+        org = Organization.query.get(organization_id)
+        if not org:
+            return jsonify({
+                'success': False,
+                'error': f'Organization {organization_id} not found'
+            }), 404
+
+        # Get existing training entries for this organization
+        existing = OrganizationExistingTraining.query.filter_by(
+            organization_id=organization_id
+        ).all()
+
+        # Get all competencies for selection UI
+        all_competencies = Competency.query.order_by(Competency.id).all()
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'existing_training_competencies': [e.competency_id for e in existing],
+                'existing_trainings_detail': [e.to_dict() for e in existing],
+                'all_competencies': [c.to_dict() for c in all_competencies]
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"[api_get_existing_trainings] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'An error occurred',
+            'details': str(e)
+        }), 500
+
+
+@phase2_learning_bp.route('/phase2/existing-trainings/<int:organization_id>', methods=['PUT'])
+def api_update_existing_trainings(organization_id):
+    """
+    Update the list of competencies with existing training.
+
+    Accepts a list of competency IDs to mark as having existing training.
+    This replaces all previous selections for the organization.
+
+    Request Body:
+        {
+            "competency_ids": [1, 5, 7],
+            "username": "admin"  // optional: who made this change
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Updated existing trainings: 3 competencies marked",
+            "competency_ids": [1, 5, 7]
+        }
+
+    Side Effects:
+        - Invalidates the LO cache for this organization (requires regeneration)
+    """
+    try:
+        # Validate organization exists
+        org = Organization.query.get(organization_id)
+        if not org:
+            return jsonify({
+                'success': False,
+                'error': f'Organization {organization_id} not found'
+            }), 404
+
+        data = request.get_json() or {}
+        competency_ids = data.get('competency_ids', [])
+        username = data.get('username', 'system')
+
+        # Validate competency IDs exist
+        if competency_ids:
+            valid_comps = Competency.query.filter(Competency.id.in_(competency_ids)).all()
+            valid_ids = {c.id for c in valid_comps}
+            invalid_ids = set(competency_ids) - valid_ids
+            if invalid_ids:
+                return jsonify({
+                    'success': False,
+                    'error': f'Invalid competency IDs: {list(invalid_ids)}'
+                }), 400
+
+        # Clear existing entries for this organization
+        OrganizationExistingTraining.query.filter_by(
+            organization_id=organization_id
+        ).delete()
+
+        # Add new entries
+        for comp_id in competency_ids:
+            entry = OrganizationExistingTraining(
+                organization_id=organization_id,
+                competency_id=comp_id,
+                created_by=username
+            )
+            db.session.add(entry)
+
+        db.session.commit()
+
+        # Invalidate LO cache since exclusions changed
+        try:
+            from app.services.learning_objectives_core import invalidate_cache
+            invalidate_cache(organization_id)
+            print(f"[api_update_existing_trainings] Cache invalidated for org {organization_id}")
+        except Exception as cache_error:
+            print(f"[api_update_existing_trainings] Cache invalidation warning: {str(cache_error)}")
+            # Continue - cache invalidation failure shouldn't block the update
+
+        print(f"[api_update_existing_trainings] Updated existing trainings for org {organization_id}: {len(competency_ids)} competencies")
+
+        return jsonify({
+            'success': True,
+            'message': f'Updated existing trainings: {len(competency_ids)} competencies marked',
+            'competency_ids': competency_ids
+        }), 200
+
+    except Exception as e:
+        print(f"[api_update_existing_trainings] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': 'An error occurred',
+            'details': str(e)
+        }), 500

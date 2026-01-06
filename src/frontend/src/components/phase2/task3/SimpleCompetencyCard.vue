@@ -18,9 +18,15 @@
       </div>
 
       <!-- Show achieved badge if target is already met (non-TTT only) -->
-      <div v-else-if="!isTTT && !hasSkillGap" class="achieved-badge" :class="{ 'not-targeted': isNotTargeted }">
-        <svg v-if="!isNotTargeted" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <div v-else-if="!isTTT && !hasSkillGap" class="achieved-badge" :class="{ 'not-targeted': isNotTargeted, 'training-exists': hasExistingTraining }">
+        <svg v-if="!isNotTargeted && !hasExistingTraining" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <!-- Training Exists icon (box/package) -->
+        <svg v-else-if="hasExistingTraining" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
         </svg>
         <span>{{ achievedLabel }}</span>
       </div>
@@ -194,10 +200,20 @@ const isNotTargeted = computed(() => {
   return props.competency.status === 'not_targeted'
 })
 
+// Check if this competency has existing training (excluded from requirements)
+const hasExistingTraining = computed(() => {
+  return props.competency.status === 'training_exists' ||
+         props.competency.has_existing_training === true
+})
+
 // Label for achieved badge
 const achievedLabel = computed(() => {
   const status = props.competency.status
 
+  // NEW: Check for existing training status first
+  if (status === 'training_exists' || props.competency.has_existing_training) {
+    return 'Training Exists'
+  }
   if (status === 'target_achieved' || status === 'achieved') {
     return 'Achieved'
   }
@@ -408,6 +424,12 @@ const rolesWithGaps = computed(() => {
 .achieved-badge.not-targeted {
   background: #f5f5f5;
   color: #909399;
+}
+
+.achieved-badge.training-exists {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
 }
 
 /* Objective Box */

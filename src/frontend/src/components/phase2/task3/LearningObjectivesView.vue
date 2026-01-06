@@ -184,6 +184,7 @@ import { ElMessage } from 'element-plus'
 import { OfficeBuilding, User, CircleCheckFilled, Check, Download } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { phase2Task3Api } from '@/api/phase2'
+import axios from '@/api/axios'
 import PyramidLevelView from './PyramidLevelView.vue'
 import RoleBasedObjectivesView from './RoleBasedObjectivesView.vue'
 
@@ -409,27 +410,9 @@ const handleCompletePhase = async () => {
   try {
     isCompletingPhase.value = true
 
-    // Get user ID from auth store
-    const userId = authStore.userId
-
-    if (!userId) {
-      ElMessage.error('User ID not found. Please login again.')
-      return
-    }
-
-    // Store Phase 2 completion data in localStorage
-    const phase2Data = {
-      organizationId: props.organizationId,
-      learningObjectivesGenerated: true,
-      pathway: props.objectives?.pathway || 'TASK_BASED',
-      totalCompetencies: props.objectives?.metadata?.total_competencies || 0,
-      completedAt: new Date().toISOString()
-    }
-
-    console.log('[LearningObjectivesView] Storing Phase 2 completion data:', phase2Data)
-
-    // Store in user-specific localStorage key (same pattern as Phase 1)
-    localStorage.setItem(`se-qpt-phase2-data-user-${userId}`, JSON.stringify(phase2Data))
+    // Mark Phase 2 as complete in the backend
+    console.log('[LearningObjectivesView] Marking Phase 2 as complete...')
+    await axios.put('/api/organization/phase2-complete')
 
     // Emit complete event for parent to handle any additional logic
     emit('complete')

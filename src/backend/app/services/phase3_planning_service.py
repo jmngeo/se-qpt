@@ -199,11 +199,16 @@ class Phase3PlanningService:
 
         return formats
 
-    def get_training_modules(self, organization_id: int) -> Dict[str, Any]:
+    def get_training_modules(self, organization_id: int, view_type: str = 'competency_level') -> Dict[str, Any]:
         """
         Get training modules from Phase 2 Learning Objectives.
 
+        Args:
+            organization_id: The organization ID
+            view_type: 'competency_level' or 'role_clustered'
+
         Returns modules with gap data, participant counts, and any existing format selections.
+        For role_clustered view, generates separate modules per training cluster.
         """
         # Get organization info for scaling
         org_info = self._get_organization_scaling_info(organization_id)
@@ -231,16 +236,28 @@ class Phase3PlanningService:
         if isinstance(objectives_data, str):
             objectives_data = json.loads(objectives_data)
 
-        # Get existing format selections
-        existing_selections = self._get_existing_selections(organization_id)
+        # Get existing format selections (include cluster_id for role_clustered)
+        existing_selections = self._get_existing_selections(organization_id, view_type)
 
-        # Extract modules from learning objectives
-        modules = self._extract_modules_from_los(
-            objectives_data,
-            organization_id,
-            org_info,
-            existing_selections
-        )
+        if view_type == 'role_clustered':
+            # Get role to cluster mapping
+            role_cluster_map = self._get_role_cluster_map(organization_id)
+            # Extract cluster-specific modules
+            modules = self._extract_cluster_modules_from_los(
+                objectives_data,
+                organization_id,
+                org_info,
+                existing_selections,
+                role_cluster_map
+            )
+        else:
+            # Extract standard modules (competency_level view)
+            modules = self._extract_modules_from_los(
+                objectives_data,
+                organization_id,
+                org_info,
+                existing_selections
+            )
 
         return {
             'modules': modules,
@@ -289,12 +306,12 @@ class Phase3PlanningService:
             'scaling_factor': round(scaling_factor, 2)
         }
 
-    def _get_existing_selections(self, organization_id: int) -> Dict[str, Dict]:
+    def _get_existing_selections(self, organization_id: int, view_type: str = 'competency_level') -> Dict[str, Dict]:
         """Get existing format selections for an organization"""
         result = self.db.execute(
             text("""
-                SELECT competency_id, target_level, pmt_type, selected_format_id,
-                       estimated_participants, confirmed,
+                SELECT competency_id, target_level, pmt_type, training_program_cluster_id,
+                       selected_format_id, estimated_participants, confirmed,
                        suitability_factor1_status, suitability_factor2_status, suitability_factor3_status
                 FROM phase3_training_module
                 WHERE organization_id = :org_id
@@ -304,11 +321,17 @@ class Phase3PlanningService:
 
         selections = {}
         for row in result:
-            key = f"{row.competency_id}_{row.target_level}_{row.pmt_type}"
+            # For role_clustered view, include cluster_id in key
+            if view_type == 'role_clustered' and row.training_program_cluster_id:
+                key = f"{row.competency_id}_{row.target_level}_{row.pmt_type}_{row.training_program_cluster_id}"
+            else:
+                key = f"{row.competency_id}_{row.target_level}_{row.pmt_type}"
+
             selections[key] = {
                 'selected_format_id': row.selected_format_id,
                 'estimated_participants': row.estimated_participants,
                 'confirmed': row.confirmed,
+                'cluster_id': row.training_program_cluster_id,
                 'suitability': {
                     'factor1_status': row.suitability_factor1_status,
                     'factor2_status': row.suitability_factor2_status,
@@ -317,6 +340,60 @@ class Phase3PlanningService:
             }
 
         return selections
+
+    def _get_role_cluster_map(self, organization_id: int) -> Dict[str, Dict]:
+        """Get mapping of role names to their cluster info"""
+        result = self.db.execute(
+            text("""
+                SELECT orl.id as role_id, orl.role_name, tpc.id as cluster_id,
+                       tpc.cluster_name, tpc.training_program_name
+                FROM organization_roles orl
+                JOIN training_program_cluster tpc ON orl.training_program_cluster_id = tpc.id
+                WHERE orl.organization_id = :org_id
+            """),
+            {'org_id': organization_id}
+        )
+
+        role_map = {}
+        for row in result:
+            role_map[str(row.role_id)] = {
+                'role_id': row.role_id,
+                'role_name': row.role_name,
+                'cluster_id': row.cluster_id,
+                'cluster_name': row.cluster_name,
+                'training_program_name': row.training_program_name
+            }
+            # Also map by role name for convenience
+            role_map[row.role_name] = role_map[str(row.role_id)]
+
+        return role_map
+
+    def _get_clusters_info(self, organization_id: int) -> Dict[int, Dict]:
+        """Get all training clusters with their info"""
+        result = self.db.execute(
+            text("""
+                SELECT tpc.id, tpc.cluster_name, tpc.training_program_name,
+                       COUNT(orl.id) as role_count
+                FROM training_program_cluster tpc
+                LEFT JOIN organization_roles orl ON orl.training_program_cluster_id = tpc.id
+                                                 AND orl.organization_id = :org_id
+                GROUP BY tpc.id, tpc.cluster_name, tpc.training_program_name
+                HAVING COUNT(orl.id) > 0
+                ORDER BY tpc.id
+            """),
+            {'org_id': organization_id}
+        )
+
+        clusters = {}
+        for row in result:
+            clusters[row.id] = {
+                'cluster_id': row.id,
+                'cluster_name': row.cluster_name,
+                'training_program_name': row.training_program_name,
+                'role_count': row.role_count
+            }
+
+        return clusters
 
     def _extract_modules_from_los(
         self,
@@ -341,8 +418,10 @@ class Phase3PlanningService:
             comps = level_data.get('competencies', [])
 
             for comp in comps:
-                # Skip if no gap
-                if comp.get('status') != 'gap':
+                # Skip if no gap/training needed
+                # Phase 2 uses 'training_required' or 'gap' for competencies needing training
+                status = comp.get('status', '')
+                if status not in ('gap', 'training_required'):
                     continue
 
                 competency_id = comp.get('competency_id')
@@ -354,8 +433,41 @@ class Phase3PlanningService:
 
                 # Get users with gap (for participant estimation)
                 gap_data = comp.get('gap_data', {})
-                users_with_gap = gap_data.get('users_with_gap', 1)
-                roles_needing = gap_data.get('roles_needing_training', [])
+
+                # Extract role names and calculate users with gap FOR THIS SPECIFIC LEVEL
+                # gap_data.roles contains level_details with per-level users_needing counts
+                roles_data = gap_data.get('roles', {})
+                roles_needing = []
+                users_with_gap = 0
+
+                if isinstance(roles_data, dict):
+                    for role_id, role_info in roles_data.items():
+                        if isinstance(role_info, dict):
+                            role_name = role_info.get('role_name', '')
+
+                            # Get level-specific user count from level_details
+                            level_details = role_info.get('level_details', {})
+                            level_data = level_details.get(str(target_level), {})
+                            level_users_needing = level_data.get('users_needing', 0)
+
+                            # Only include role if it has users needing training at this level
+                            if level_users_needing > 0 and role_name:
+                                roles_needing.append(role_name)
+                                users_with_gap += level_users_needing
+
+                # Fallback if no level-specific data found
+                if users_with_gap == 0:
+                    # Try the aggregate users_needing_training as fallback
+                    for role_id, role_info in roles_data.items():
+                        if isinstance(role_info, dict):
+                            users_with_gap += role_info.get('users_needing_training', 0)
+                            role_name = role_info.get('role_name', '')
+                            if role_name and role_name not in roles_needing:
+                                roles_needing.append(role_name)
+
+                    # Final fallback
+                    if users_with_gap == 0:
+                        users_with_gap = gap_data.get('users_with_gap', 1)
 
                 # Calculate estimated participants
                 estimated_participants = int(users_with_gap * scaling_info['scaling_factor'])
@@ -400,6 +512,137 @@ class Phase3PlanningService:
 
         return modules
 
+    def _extract_cluster_modules_from_los(
+        self,
+        objectives_data: Dict,
+        organization_id: int,
+        scaling_info: Dict,
+        existing_selections: Dict,
+        role_cluster_map: Dict
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract training modules from learning objectives, creating separate modules per cluster.
+        For Role-Clustered view - each cluster gets its own training module.
+        """
+        modules = []
+
+        # Get data section
+        data = objectives_data.get('data', objectives_data)
+        main_pyramid = data.get('main_pyramid', {})
+        levels = main_pyramid.get('levels', {})
+
+        # Get competency lookup
+        competencies = self._get_competency_lookup()
+
+        # Get clusters info
+        clusters_info = self._get_clusters_info(organization_id)
+
+        for level_key, level_data in levels.items():
+            target_level = int(level_key)
+            comps = level_data.get('competencies', [])
+
+            for comp in comps:
+                status = comp.get('status', '')
+                if status not in ('gap', 'training_required'):
+                    continue
+
+                competency_id = comp.get('competency_id')
+                competency_name = comp.get('competency_name', competencies.get(competency_id, 'Unknown'))
+
+                lo_data = comp.get('learning_objective', {})
+                has_pmt = lo_data.get('has_pmt_breakdown', False)
+
+                gap_data = comp.get('gap_data', {})
+                roles_data = gap_data.get('roles', {})
+
+                # Group roles by cluster
+                cluster_roles = {}  # cluster_id -> list of (role_id, role_name, users_needing)
+
+                for role_id, role_info in roles_data.items():
+                    if not isinstance(role_info, dict):
+                        continue
+
+                    role_name = role_info.get('role_name', '')
+                    if not role_name:
+                        continue
+
+                    # Get level-specific user count
+                    level_details = role_info.get('level_details', {})
+                    level_data_item = level_details.get(str(target_level), {})
+                    level_users_needing = level_data_item.get('users_needing', 0)
+
+                    if level_users_needing == 0:
+                        continue
+
+                    # Find which cluster this role belongs to
+                    role_mapping = role_cluster_map.get(role_id) or role_cluster_map.get(role_name)
+                    if not role_mapping:
+                        continue
+
+                    cluster_id = role_mapping['cluster_id']
+                    if cluster_id not in cluster_roles:
+                        cluster_roles[cluster_id] = []
+
+                    cluster_roles[cluster_id].append({
+                        'role_id': role_id,
+                        'role_name': role_name,
+                        'users_needing': level_users_needing
+                    })
+
+                # Create modules for each cluster that has roles needing training
+                for cluster_id, roles_list in cluster_roles.items():
+                    if not roles_list:
+                        continue
+
+                    cluster_info = clusters_info.get(cluster_id, {})
+                    cluster_name = cluster_info.get('training_program_name', f'Cluster {cluster_id}')
+
+                    roles_needing = [r['role_name'] for r in roles_list]
+                    users_with_gap = sum(r['users_needing'] for r in roles_list)
+                    estimated_participants = int(users_with_gap * scaling_info['scaling_factor'])
+
+                    if has_pmt:
+                        for pmt_type in ['method', 'tool']:
+                            key = f"{competency_id}_{target_level}_{pmt_type}_{cluster_id}"
+                            selection = existing_selections.get(key, {})
+
+                            modules.append({
+                                'competency_id': competency_id,
+                                'competency_name': competency_name,
+                                'target_level': target_level,
+                                'pmt_type': pmt_type,
+                                'cluster_id': cluster_id,
+                                'cluster_name': cluster_name,
+                                'module_name': f"{competency_name} - Level {target_level} - {pmt_type.title()}",
+                                'users_with_gap': users_with_gap,
+                                'estimated_participants': estimated_participants,
+                                'roles_needing_training': roles_needing,
+                                'selected_format_id': selection.get('selected_format_id'),
+                                'confirmed': selection.get('confirmed', False),
+                                'suitability': selection.get('suitability')
+                            })
+                    else:
+                        key = f"{competency_id}_{target_level}_combined_{cluster_id}"
+                        selection = existing_selections.get(key, {})
+
+                        modules.append({
+                            'competency_id': competency_id,
+                            'competency_name': competency_name,
+                            'target_level': target_level,
+                            'pmt_type': 'combined',
+                            'cluster_id': cluster_id,
+                            'cluster_name': cluster_name,
+                            'module_name': f"{competency_name} - Level {target_level}",
+                            'users_with_gap': users_with_gap,
+                            'estimated_participants': estimated_participants,
+                            'roles_needing_training': roles_needing,
+                            'selected_format_id': selection.get('selected_format_id'),
+                            'confirmed': selection.get('confirmed', False),
+                            'suitability': selection.get('suitability')
+                        })
+
+        return modules
+
     def _get_competency_lookup(self) -> Dict[int, str]:
         """Get competency ID to name mapping"""
         result = self.db.execute(
@@ -438,19 +681,6 @@ class Phase3PlanningService:
         if not format_info:
             raise ValueError(f"Format not found: {format_id}")
 
-        # Get organization's selected strategy
-        strategy = self.db.execute(
-            text("""
-                SELECT st.id, st.strategy_name
-                FROM organization o
-                JOIN strategy_template st ON st.strategy_name = o.selected_archetype
-                WHERE o.id = :org_id
-            """),
-            {'org_id': organization_id}
-        ).fetchone()
-
-        strategy_id = strategy.id if strategy else 1
-
         # Factor 1: Participant Count
         factor1 = self._evaluate_participant_factor(
             participant_count,
@@ -466,9 +696,9 @@ class Phase3PlanningService:
             format_id
         )
 
-        # Factor 3: Strategy Consistency
+        # Factor 3: Strategy Consistency (supports multiple strategies with weighted aggregation)
         factor3 = self._evaluate_strategy_factor(
-            strategy_id,
+            organization_id,
             format_id
         )
 
@@ -554,30 +784,151 @@ class Phase3PlanningService:
 
     def _evaluate_strategy_factor(
         self,
-        strategy_id: int,
+        organization_id: int,
         format_id: int
     ) -> Dict[str, str]:
-        """Evaluate Factor 3: Strategy consistency"""
-        result = self.db.execute(
-            text("""
-                SELECT consistency
-                FROM strategy_learning_format_matrix
-                WHERE strategy_template_id = :strat_id AND learning_format_id = :fmt_id
-            """),
-            {'strat_id': strategy_id, 'fmt_id': format_id}
-        ).fetchone()
+        """
+        Evaluate Factor 3: Strategy consistency with weighted multi-strategy support.
 
-        if not result:
+        For organizations with multiple strategies:
+        - PRIMARY strategy (priority=1): weight = 2
+        - SUPPLEMENTARY strategies (priority>1): weight = 1
+
+        Scoring:
+        - '++' = 2 points (highly recommended)
+        - '+' = 1 point (partly recommended)
+        - '--' = 0 points (not consistent)
+
+        Weighted average thresholds:
+        - >= 1.5: Green (highly recommended)
+        - >= 0.5: Yellow (partly recommended)
+        - < 0.5: Red (not consistent)
+
+        For single strategy: works exactly as before.
+        """
+        # Get all selected strategies for the organization
+        strategies = self.db.execute(
+            text("""
+                SELECT ls.strategy_template_id, ls.strategy_name, ls.priority
+                FROM learning_strategy ls
+                WHERE ls.organization_id = :org_id
+                  AND ls.selected = true
+                  AND ls.strategy_template_id IS NOT NULL
+                ORDER BY ls.priority ASC
+            """),
+            {'org_id': organization_id}
+        ).fetchall()
+
+        if not strategies:
+            # Fallback to single strategy lookup
+            strategy_id = self._get_strategy_id(organization_id)
+            result = self.db.execute(
+                text("""
+                    SELECT consistency
+                    FROM strategy_learning_format_matrix
+                    WHERE strategy_template_id = :strat_id AND learning_format_id = :fmt_id
+                """),
+                {'strat_id': strategy_id, 'fmt_id': format_id}
+            ).fetchone()
+
+            if not result:
+                return {'status': 'yellow', 'message': 'No strategy data available'}
+
+            consistency = result.consistency
+            if consistency == '++':
+                return {'status': 'green', 'message': 'Highly recommended for your strategy'}
+            elif consistency == '+':
+                return {'status': 'yellow', 'message': 'Partly recommended for your strategy'}
+            else:
+                return {'status': 'red', 'message': 'Not consistent with your strategy'}
+
+        # Single strategy case - use simple logic (same as before)
+        if len(strategies) == 1:
+            result = self.db.execute(
+                text("""
+                    SELECT consistency
+                    FROM strategy_learning_format_matrix
+                    WHERE strategy_template_id = :strat_id AND learning_format_id = :fmt_id
+                """),
+                {'strat_id': strategies[0].strategy_template_id, 'fmt_id': format_id}
+            ).fetchone()
+
+            if not result:
+                return {'status': 'yellow', 'message': 'No strategy data available'}
+
+            consistency = result.consistency
+            if consistency == '++':
+                return {'status': 'green', 'message': 'Highly recommended for your strategy'}
+            elif consistency == '+':
+                return {'status': 'yellow', 'message': 'Partly recommended for your strategy'}
+            else:
+                return {'status': 'red', 'message': 'Not consistent with your strategy'}
+
+        # Multiple strategies - use weighted aggregation
+        consistency_points = {'++': 2, '+': 1, '--': 0}
+        total_weighted_score = 0
+        total_weight = 0
+        strategy_details = []
+
+        for strategy in strategies:
+            # Weight: PRIMARY (priority=1) gets weight 2, others get weight 1
+            weight = 2 if strategy.priority == 1 else 1
+
+            result = self.db.execute(
+                text("""
+                    SELECT consistency
+                    FROM strategy_learning_format_matrix
+                    WHERE strategy_template_id = :strat_id AND learning_format_id = :fmt_id
+                """),
+                {'strat_id': strategy.strategy_template_id, 'fmt_id': format_id}
+            ).fetchone()
+
+            if result:
+                consistency = result.consistency
+                points = consistency_points.get(consistency, 0)
+                total_weighted_score += points * weight
+                total_weight += weight
+                strategy_details.append({
+                    'name': strategy.strategy_name,
+                    'consistency': consistency,
+                    'is_primary': strategy.priority == 1
+                })
+
+        if total_weight == 0:
             return {'status': 'yellow', 'message': 'No strategy data available'}
 
-        consistency = result.consistency
+        # Calculate weighted average
+        weighted_avg = total_weighted_score / total_weight
 
-        if consistency == '++':
-            return {'status': 'green', 'message': 'Highly recommended for your strategy'}
-        elif consistency == '+':
-            return {'status': 'yellow', 'message': 'Partly recommended for your strategy'}
+        # Build descriptive message
+        primary_strategies = [s for s in strategy_details if s['is_primary']]
+        primary_name = primary_strategies[0]['name'] if primary_strategies else 'selected strategies'
+        strategy_count = len(strategy_details)
+
+        if weighted_avg >= 1.5:
+            if strategy_count == 1:
+                return {'status': 'green', 'message': 'Highly recommended for your strategy'}
+            else:
+                return {
+                    'status': 'green',
+                    'message': f'Highly recommended across {strategy_count} strategies'
+                }
+        elif weighted_avg >= 0.5:
+            if strategy_count == 1:
+                return {'status': 'yellow', 'message': 'Partly recommended for your strategy'}
+            else:
+                return {
+                    'status': 'yellow',
+                    'message': f'Partly recommended across {strategy_count} strategies'
+                }
         else:
-            return {'status': 'red', 'message': 'Not consistent with your strategy'}
+            if strategy_count == 1:
+                return {'status': 'red', 'message': 'Not consistent with your strategy'}
+            else:
+                return {
+                    'status': 'red',
+                    'message': f'Not consistent with {strategy_count} strategies'
+                }
 
     def _get_overall_status(self, factors: List[Dict]) -> str:
         """Get overall status based on individual factors"""
@@ -597,58 +948,114 @@ class Phase3PlanningService:
         format_id: int,
         suitability: Dict[str, Any],
         estimated_participants: int,
-        confirmed: bool = False
+        confirmed: bool = False,
+        cluster_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """Save a format selection for a training module"""
-        self.db.execute(
+        # Check if record exists
+        existing = self.db.execute(
             text("""
-                INSERT INTO phase3_training_module (
-                    organization_id, competency_id, target_level, pmt_type,
-                    selected_format_id, estimated_participants, actual_users_with_gap,
-                    suitability_factor1_status, suitability_factor1_message,
-                    suitability_factor2_status, suitability_factor2_message,
-                    suitability_factor3_status, suitability_factor3_message,
-                    confirmed
-                ) VALUES (
-                    :org_id, :comp_id, :level, :pmt,
-                    :fmt_id, :est_participants, :users_gap,
-                    :f1_status, :f1_msg,
-                    :f2_status, :f2_msg,
-                    :f3_status, :f3_msg,
-                    :confirmed
-                )
-                ON CONFLICT (organization_id, competency_id, target_level, pmt_type)
-                DO UPDATE SET
-                    selected_format_id = :fmt_id,
-                    estimated_participants = :est_participants,
-                    suitability_factor1_status = :f1_status,
-                    suitability_factor1_message = :f1_msg,
-                    suitability_factor2_status = :f2_status,
-                    suitability_factor2_message = :f2_msg,
-                    suitability_factor3_status = :f3_status,
-                    suitability_factor3_message = :f3_msg,
-                    confirmed = :confirmed,
-                    updated_at = CURRENT_TIMESTAMP
+                SELECT id FROM phase3_training_module
+                WHERE organization_id = :org_id
+                  AND competency_id = :comp_id
+                  AND target_level = :level
+                  AND COALESCE(pmt_type, '') = COALESCE(:pmt, '')
+                  AND COALESCE(training_program_cluster_id, 0) = COALESCE(:cluster_id, 0)
             """),
             {
                 'org_id': organization_id,
                 'comp_id': competency_id,
                 'level': target_level,
                 'pmt': pmt_type,
-                'fmt_id': format_id,
-                'est_participants': estimated_participants,
-                'users_gap': 0,
-                'f1_status': suitability['factors']['factor1']['status'],
-                'f1_msg': suitability['factors']['factor1']['message'],
-                'f2_status': suitability['factors']['factor2']['status'],
-                'f2_msg': suitability['factors']['factor2']['message'],
-                'f3_status': suitability['factors']['factor3']['status'],
-                'f3_msg': suitability['factors']['factor3']['message'],
-                'confirmed': confirmed
+                'cluster_id': cluster_id
             }
+        ).fetchone()
+
+        if existing:
+            # Update existing record
+            self.db.execute(
+                text("""
+                    UPDATE phase3_training_module SET
+                        selected_format_id = :fmt_id,
+                        estimated_participants = :est_participants,
+                        suitability_factor1_status = :f1_status,
+                        suitability_factor1_message = :f1_msg,
+                        suitability_factor2_status = :f2_status,
+                        suitability_factor2_message = :f2_msg,
+                        suitability_factor3_status = :f3_status,
+                        suitability_factor3_message = :f3_msg,
+                        confirmed = :confirmed,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id
+                """),
+                {
+                    'id': existing.id,
+                    'fmt_id': format_id,
+                    'est_participants': estimated_participants,
+                    'f1_status': suitability['factors']['factor1']['status'],
+                    'f1_msg': suitability['factors']['factor1']['message'],
+                    'f2_status': suitability['factors']['factor2']['status'],
+                    'f2_msg': suitability['factors']['factor2']['message'],
+                    'f3_status': suitability['factors']['factor3']['status'],
+                    'f3_msg': suitability['factors']['factor3']['message'],
+                    'confirmed': confirmed
+                }
+            )
+        else:
+            # Insert new record
+            self.db.execute(
+                text("""
+                    INSERT INTO phase3_training_module (
+                        organization_id, competency_id, target_level, pmt_type,
+                        training_program_cluster_id,
+                        selected_format_id, estimated_participants, actual_users_with_gap,
+                        suitability_factor1_status, suitability_factor1_message,
+                        suitability_factor2_status, suitability_factor2_message,
+                        suitability_factor3_status, suitability_factor3_message,
+                        confirmed
+                    ) VALUES (
+                        :org_id, :comp_id, :level, :pmt,
+                        :cluster_id,
+                        :fmt_id, :est_participants, :users_gap,
+                        :f1_status, :f1_msg,
+                        :f2_status, :f2_msg,
+                        :f3_status, :f3_msg,
+                        :confirmed
+                    )
+                """),
+                {
+                    'org_id': organization_id,
+                    'comp_id': competency_id,
+                    'level': target_level,
+                    'pmt': pmt_type,
+                    'cluster_id': cluster_id,
+                    'fmt_id': format_id,
+                    'est_participants': estimated_participants,
+                    'users_gap': 0,
+                    'f1_status': suitability['factors']['factor1']['status'],
+                    'f1_msg': suitability['factors']['factor1']['message'],
+                    'f2_status': suitability['factors']['factor2']['status'],
+                    'f2_msg': suitability['factors']['factor2']['message'],
+                    'f3_status': suitability['factors']['factor3']['status'],
+                    'f3_msg': suitability['factors']['factor3']['message'],
+                    'confirmed': confirmed
+                }
+            )
+
+        self.db.commit()
+        return {'success': True}
+
+    def mark_task2_completed(self, organization_id: int) -> Dict[str, Any]:
+        """Mark Task 2 (Learning Format Selection) as completed"""
+        self.db.execute(
+            text("""
+                UPDATE phase3_config
+                SET task2_completed = true, updated_at = CURRENT_TIMESTAMP
+                WHERE organization_id = :org_id
+            """),
+            {'org_id': organization_id}
         )
         self.db.commit()
-
         return {'success': True}
 
     # =========================================================================
@@ -690,7 +1097,60 @@ class Phase3PlanningService:
                 response_format={"type": "json_object"}
             )
 
-            result = json.loads(response.choices[0].message.content)
+            # Parse JSON response with error handling
+            raw_content = response.choices[0].message.content
+            try:
+                result = json.loads(raw_content)
+            except json.JSONDecodeError as json_err:
+                current_app.logger.error(f"Failed to parse LLM response as JSON: {json_err}")
+                current_app.logger.error(f"Raw response: {raw_content[:500]}")
+                return {
+                    'success': False,
+                    'error': 'Failed to parse timeline response. Please try again.'
+                }
+
+            # Validate required structure
+            milestones = result.get('milestones', [])
+            if not isinstance(milestones, list):
+                current_app.logger.error(f"Invalid milestones format: {type(milestones)}")
+                return {
+                    'success': False,
+                    'error': 'Invalid timeline format received. Please try again.'
+                }
+
+            # Validate milestone count (should be exactly 5)
+            if len(milestones) < 5:
+                current_app.logger.warning(f"Received {len(milestones)} milestones, expected 5")
+                # Pad with default milestones if needed
+                default_milestones = [
+                    {'order': 1, 'name': 'Concept Development Start', 'description': 'Training material development begins'},
+                    {'order': 2, 'name': 'Concept Development End', 'description': 'Training materials ready for pilot'},
+                    {'order': 3, 'name': 'Pilot Start', 'description': 'Pilot training with test group begins'},
+                    {'order': 4, 'name': 'Rollout Start', 'description': 'Full training rollout begins'},
+                    {'order': 5, 'name': 'Rollout End', 'description': 'Training program completion'}
+                ]
+                while len(milestones) < 5:
+                    idx = len(milestones)
+                    milestones.append(default_milestones[idx])
+                result['milestones'] = milestones
+
+            # Validate each milestone has required fields
+            for i, m in enumerate(milestones):
+                if not m.get('name'):
+                    m['name'] = f"Milestone {i+1}"
+                if not m.get('order'):
+                    m['order'] = i + 1
+                if not m.get('estimated_date'):
+                    # Generate default dates starting from current month
+                    from datetime import datetime, timedelta
+                    base_date = datetime.now()
+                    months_offset = [0, 3, 4, 6, 12]  # Default spacing
+                    m['estimated_date'] = (base_date + timedelta(days=30*months_offset[min(i, 4)])).strftime('%Y-%m-%d')
+                if not m.get('quarter'):
+                    from datetime import datetime
+                    date = datetime.strptime(m['estimated_date'], '%Y-%m-%d')
+                    quarter = (date.month - 1) // 3 + 1
+                    m['quarter'] = f"Q{quarter} {date.year}"
 
             # Save milestones
             self._save_timeline_milestones(organization_id, result)
@@ -706,15 +1166,35 @@ class Phase3PlanningService:
             )
             self.db.commit()
 
+            # Normalize milestone field names for frontend consistency
+            normalized_milestones = []
+            for m in result.get('milestones', []):
+                normalized_milestones.append({
+                    'order': m.get('order'),
+                    'milestone_name': m.get('name'),  # LLM returns 'name', frontend expects 'milestone_name'
+                    'milestone_description': m.get('description', ''),
+                    'estimated_date': m.get('estimated_date'),
+                    'quarter': m.get('quarter'),
+                    'generation_reasoning': result.get('reasoning', '')
+                })
+
             return {
                 'success': True,
-                'milestones': result.get('milestones', []),
+                'milestones': normalized_milestones,
                 'reasoning': result.get('reasoning', ''),
                 'generation_context': context
             }
 
+        except json.JSONDecodeError as e:
+            current_app.logger.error(f"JSON parsing error in timeline generation: {e}")
+            return {
+                'success': False,
+                'error': 'Failed to parse timeline response. Please try again.'
+            }
         except Exception as e:
             current_app.logger.error(f"Timeline generation failed: {e}")
+            import traceback
+            current_app.logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 'success': False,
                 'error': str(e)
@@ -732,6 +1212,28 @@ class Phase3PlanningService:
             {'org_id': organization_id}
         ).fetchone()
 
+        # Get all selected strategies from Phase 1
+        all_strategies = self._get_all_strategies(organization_id)
+        strategy_name = all_strategies[0]['name'] if all_strategies else 'Not Selected'
+        strategy_names_list = [s['name'] for s in all_strategies]
+
+        # Get target group size from Phase 1 (actual unique participants)
+        target_group_result = self.db.execute(
+            text("""
+                SELECT (responses::jsonb)->>'value' as target_size,
+                       (responses::jsonb)->>'range' as range_label
+                FROM phase_questionnaire_responses
+                WHERE organization_id = :org_id
+                  AND questionnaire_type = 'target_group'
+                ORDER BY completed_at DESC
+                LIMIT 1
+            """),
+            {'org_id': organization_id}
+        ).fetchone()
+
+        target_group_size = int(target_group_result.target_size) if target_group_result and target_group_result.target_size else 100
+        target_group_range = target_group_result.range_label if target_group_result else 'Unknown'
+
         # Get training modules
         modules = self.get_training_modules(organization_id)
         module_list = modules.get('modules', [])
@@ -747,9 +1249,6 @@ class Phase3PlanningService:
                 if fmt:
                     format_counts[fmt.short_name] = format_counts.get(fmt.short_name, 0) + 1
 
-        # Calculate totals
-        total_participants = sum(m.get('estimated_participants', 0) for m in module_list)
-
         # Get competencies involved
         competencies = list(set(m.get('competency_name', '') for m in module_list))
 
@@ -764,9 +1263,12 @@ class Phase3PlanningService:
         return {
             'organization_name': org.organization_name if org else 'Unknown',
             'maturity_level': org.maturity_score if org else 2,
-            'selected_strategy': org.selected_archetype if org else 'Need-based training',
+            'selected_strategy': strategy_name,  # Primary strategy for backward compatibility
+            'all_strategies': strategy_names_list,  # All selected strategies
+            'strategy_count': len(strategy_names_list),
             'total_modules': len(module_list),
-            'total_estimated_participants': total_participants,
+            'target_group_size': target_group_size,
+            'target_group_range': target_group_range,
             'competencies_included': competencies[:10],  # Limit to 10
             'format_distribution': format_counts,
             'has_elearning_components': has_elearning,
@@ -776,14 +1278,18 @@ class Phase3PlanningService:
 
     def _build_timeline_prompt(self, context: Dict[str, Any]) -> str:
         """Build the LLM prompt for timeline generation"""
+        # Format strategies for prompt
+        strategies_text = ', '.join(context.get('all_strategies', [context['selected_strategy']]))
+        strategy_count = context.get('strategy_count', 1)
+
         return f"""You are an expert in training program planning and implementation. Based on the following SE training program context, generate realistic timeline estimates for 5 key milestones.
 
 ## Training Program Context
 - Organization: {context['organization_name']}
 - Organization Maturity Level: {context['maturity_level']}
-- Selected Qualification Strategy: {context['selected_strategy']}
+- Selected Qualification Strategies ({strategy_count}): {strategies_text}
 - Total Training Modules: {context['total_modules']}
-- Total Estimated Participants: {context['total_estimated_participants']}
+- Target Group Size: {context['target_group_size']} participants ({context['target_group_range']})
 - Competencies: {', '.join(context['competencies_included'][:5])}
 - Format Distribution: {json.dumps(context['format_distribution'])}
 - Has E-Learning Components: {context['has_elearning_components']}
@@ -878,10 +1384,11 @@ Respond in JSON format:
         for row in result:
             milestones.append({
                 'order': row.milestone_order,
-                'name': row.milestone_name,
-                'description': row.milestone_description,
+                'milestone_name': row.milestone_name,  # Frontend expects 'milestone_name'
+                'milestone_description': row.milestone_description,
                 'estimated_date': row.estimated_date.isoformat() if row.estimated_date else None,
-                'quarter': row.quarter
+                'quarter': row.quarter,
+                'generation_reasoning': row.generation_reasoning
             })
             if not reasoning and row.generation_reasoning:
                 reasoning = row.generation_reasoning
@@ -902,8 +1409,32 @@ Respond in JSON format:
     def get_phase3_output(self, organization_id: int) -> Dict[str, Any]:
         """Get complete Phase 3 output summary"""
         config = self.get_phase3_config(organization_id)
-        modules = self.get_training_modules(organization_id)
+        # Pass the selected view type to get proper cluster info for role_clustered view
+        selected_view = config.get('selected_view', 'competency_level')
+        modules = self.get_training_modules(organization_id, view_type=selected_view)
         timeline = self.get_timeline(organization_id)
+
+        # Get all strategies
+        all_strategies = self._get_all_strategies(organization_id)
+        strategy_name = all_strategies[0]['name'] if all_strategies else 'Not Selected'
+        all_strategy_names = [s['name'] for s in all_strategies]
+
+        # Get target group size from Phase 1
+        target_group_result = self.db.execute(
+            text("""
+                SELECT (responses::jsonb)->>'value' as target_size,
+                       (responses::jsonb)->>'range' as range_label
+                FROM phase_questionnaire_responses
+                WHERE organization_id = :org_id
+                  AND questionnaire_type = 'target_group'
+                ORDER BY completed_at DESC
+                LIMIT 1
+            """),
+            {'org_id': organization_id}
+        ).fetchone()
+
+        target_group_size = int(target_group_result.target_size) if target_group_result and target_group_result.target_size else 0
+        target_group_range = target_group_result.range_label if target_group_result else 'Unknown'
 
         # Calculate summary stats
         module_list = modules.get('modules', [])
@@ -924,14 +1455,21 @@ Respond in JSON format:
         return {
             'organization_id': organization_id,
             'config': config,
-            'training_modules': modules,
+            'modules': module_list,  # Direct list for frontend convenience
+            'training_modules': modules,  # Full response with scaling_info
             'timeline': timeline,
             'summary': {
+                'module_count': len(module_list),  # Frontend-compatible name
                 'total_modules': len(module_list),
                 'configured_modules': configured,
                 'confirmed_modules': confirmed,
+                'target_group_size': target_group_size,
+                'target_group_range': target_group_range,
                 'total_estimated_participants': sum(m.get('estimated_participants', 0) for m in module_list),
                 'format_distribution': format_dist,
+                'strategy_name': strategy_name,  # Primary strategy for backward compatibility
+                'all_strategies': all_strategy_names,  # All selected strategies
+                'strategy_count': len(all_strategy_names),
                 'completion': {
                     'task1': config.get('task1_completed', False),
                     'task2': configured == len(module_list) and len(module_list) > 0,
@@ -939,3 +1477,216 @@ Respond in JSON format:
                 }
             }
         }
+
+    def _get_strategy_name(self, organization_id: int) -> str:
+        """Get the strategy name for an organization"""
+        # First try: check phase_questionnaire_responses for strategies (Phase 1 selection)
+        try:
+            strategy_result = self.db.execute(
+                text("""
+                    SELECT (responses::jsonb)->'strategies'->0->>'strategyName' as strategy_name
+                    FROM phase_questionnaire_responses
+                    WHERE organization_id = :org_id
+                      AND questionnaire_type = 'strategies'
+                    ORDER BY completed_at DESC
+                    LIMIT 1
+                """),
+                {'org_id': organization_id}
+            ).fetchone()
+
+            if strategy_result and strategy_result.strategy_name:
+                return strategy_result.strategy_name
+        except Exception:
+            self.db.rollback()
+
+        # Second try: check organization.selected_archetype directly
+        try:
+            org_result = self.db.execute(
+                text("""
+                    SELECT selected_archetype FROM organization WHERE id = :org_id
+                """),
+                {'org_id': organization_id}
+            ).fetchone()
+
+            if org_result and org_result.selected_archetype:
+                return org_result.selected_archetype
+        except Exception:
+            self.db.rollback()
+
+        # Fallback: check learning objectives data
+        try:
+            lo_result = self.db.execute(
+                text("""
+                    SELECT objectives_data->'data'->'strategy_name' as strategy_name
+                    FROM generated_learning_objectives
+                    WHERE organization_id = :org_id
+                    ORDER BY generated_at DESC
+                    LIMIT 1
+                """),
+                {'org_id': organization_id}
+            ).fetchone()
+
+            if lo_result and lo_result.strategy_name:
+                name = lo_result.strategy_name
+                if isinstance(name, str):
+                    return name.strip('"')
+        except Exception:
+            self.db.rollback()
+
+        return 'Not Selected'
+
+    def _get_strategy_id(self, organization_id: int) -> int:
+        """
+        Get the strategy template ID for an organization.
+        Uses the learning_strategy table which has proper strategy_template_id.
+        Returns default strategy ID (1) if no match found.
+        """
+        # BEST SOURCE: learning_strategy table has strategy_template_id properly linked
+        try:
+            result = self.db.execute(
+                text("""
+                    SELECT strategy_template_id
+                    FROM learning_strategy
+                    WHERE organization_id = :org_id
+                      AND selected = true
+                      AND strategy_template_id IS NOT NULL
+                    ORDER BY priority ASC
+                    LIMIT 1
+                """),
+                {'org_id': organization_id}
+            ).fetchone()
+
+            if result and result.strategy_template_id:
+                return result.strategy_template_id
+        except Exception:
+            self.db.rollback()
+
+        # FALLBACK: Try to match from phase_questionnaire_responses using strategy key
+        try:
+            # Get the strategy key from questionnaire responses
+            strategy_key_result = self.db.execute(
+                text("""
+                    SELECT (responses::jsonb)->'strategies'->0->>'strategy' as strategy_key
+                    FROM phase_questionnaire_responses
+                    WHERE organization_id = :org_id
+                      AND questionnaire_type = 'strategies'
+                    ORDER BY completed_at DESC
+                    LIMIT 1
+                """),
+                {'org_id': organization_id}
+            ).fetchone()
+
+            if strategy_key_result and strategy_key_result.strategy_key:
+                # Map strategy keys to template IDs
+                strategy_key_map = {
+                    'common_basic_understanding': 1,
+                    'se_for_managers': 2,
+                    'orientation_in_pilot': 3,
+                    'needs_based_project': 4,
+                    'continuous_support': 5,
+                    'train_the_trainer': 6,
+                    'certification': 7
+                }
+                strategy_id = strategy_key_map.get(strategy_key_result.strategy_key)
+                if strategy_id:
+                    return strategy_id
+        except Exception:
+            self.db.rollback()
+
+        # LAST FALLBACK: Try name-based matching
+        strategy_name = self._get_strategy_name(organization_id)
+
+        if strategy_name != 'Not Selected':
+            try:
+                # Case-insensitive, normalize punctuation
+                normalized_name = strategy_name.lower().replace('-', ' ').replace(',', ' ')
+                result = self.db.execute(
+                    text("""
+                        SELECT id FROM strategy_template
+                        WHERE LOWER(REPLACE(REPLACE(strategy_name, '-', ' '), ',', ' '))
+                              LIKE :pattern
+                        ORDER BY id
+                        LIMIT 1
+                    """),
+                    {'pattern': f'%{normalized_name.split()[0]}%'}
+                ).fetchone()
+
+                if result:
+                    return result.id
+            except Exception:
+                self.db.rollback()
+
+        # Default to strategy 1 (Common basic understanding)
+        return 1
+
+    def _get_all_strategies(self, organization_id: int) -> List[Dict[str, Any]]:
+        """
+        Get all selected strategies for an organization with their priorities.
+
+        Returns a list of strategy dicts sorted by priority:
+        [
+            {'id': 5, 'name': 'Continuous Support', 'priority': 1, 'is_primary': True},
+            {'id': 2, 'name': 'SE for Managers', 'priority': 3, 'is_primary': False},
+            ...
+        ]
+        """
+        try:
+            result = self.db.execute(
+                text("""
+                    SELECT ls.strategy_template_id, ls.strategy_name, ls.priority
+                    FROM learning_strategy ls
+                    WHERE ls.organization_id = :org_id
+                      AND ls.selected = true
+                      AND ls.strategy_template_id IS NOT NULL
+                    ORDER BY ls.priority ASC, ls.strategy_name ASC
+                """),
+                {'org_id': organization_id}
+            ).fetchall()
+
+            if result:
+                strategies = []
+                for row in result:
+                    strategies.append({
+                        'id': row.strategy_template_id,
+                        'name': row.strategy_name,
+                        'priority': row.priority,
+                        'is_primary': row.priority == 1
+                    })
+                return strategies
+        except Exception:
+            self.db.rollback()
+
+        # Fallback: try phase_questionnaire_responses
+        try:
+            pqr_result = self.db.execute(
+                text("""
+                    SELECT responses::jsonb->'strategies' as strategies
+                    FROM phase_questionnaire_responses
+                    WHERE organization_id = :org_id
+                      AND questionnaire_type = 'strategies'
+                    ORDER BY completed_at DESC
+                    LIMIT 1
+                """),
+                {'org_id': organization_id}
+            ).fetchone()
+
+            if pqr_result and pqr_result.strategies:
+                import json
+                strategies_data = json.loads(pqr_result.strategies) if isinstance(pqr_result.strategies, str) else pqr_result.strategies
+                strategies = []
+                for i, s in enumerate(strategies_data):
+                    is_primary = s.get('priority') == 'PRIMARY'
+                    strategies.append({
+                        'id': None,  # Not available from this source
+                        'name': s.get('strategyName', 'Unknown'),
+                        'priority': 1 if is_primary else 3,
+                        'is_primary': is_primary
+                    })
+                # Sort by priority
+                strategies.sort(key=lambda x: x['priority'])
+                return strategies
+        except Exception:
+            self.db.rollback()
+
+        # Default: return single default strategy
+        return [{'id': 1, 'name': 'Common basic understanding', 'priority': 1, 'is_primary': True}]

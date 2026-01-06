@@ -34,8 +34,8 @@
               </template>
               <el-menu-item index="/app/phases/1">Phase 1: Prepare SE Training</el-menu-item>
               <el-menu-item index="/app/phases/2">Phase 2: Identify Competencies</el-menu-item>
-              <el-menu-item index="/app/phases/3">Phase 3: Macro Planning</el-menu-item>
-              <el-menu-item index="/app/phases/4">Phase 4: Micro Planning</el-menu-item>
+              <el-menu-item v-if="authStore.isAdmin" index="/app/phases/3">Phase 3: Macro Planning</el-menu-item>
+              <el-menu-item v-if="authStore.isAdmin" index="/app/phases/4">Phase 4: Micro Planning</el-menu-item>
             </el-sub-menu>
 
             <!-- Plans button hidden for now - will be used in Phase 4

@@ -2345,6 +2345,221 @@ def find_processes():
         return jsonify({"error": str(e)}), 500
 
 
+@main_bp.route('/iso-processes', methods=['GET'])
+def get_all_iso_processes():
+    """
+    Get all 30 ISO/IEC 15288 processes with their lifecycle groups.
+    Used for the "Add More Processes" feature in Phase 2 task-based pathway.
+
+    Returns:
+        {
+            "status": "success",
+            "processes": [{id, name, description, lifecycle_id, lifecycle_name}, ...],
+            "grouped": {"Agreement Processes": [...], ...},
+            "total": 30
+        }
+    """
+    try:
+        from models import IsoProcesses, IsoSystemLifeCycleProcesses, db
+
+        # Fetch all processes with lifecycle info
+        processes = db.session.query(
+            IsoProcesses.id,
+            IsoProcesses.name,
+            IsoProcesses.description,
+            IsoProcesses.life_cycle_process_id,
+            IsoSystemLifeCycleProcesses.name.label('lifecycle_name')
+        ).join(
+            IsoSystemLifeCycleProcesses,
+            IsoProcesses.life_cycle_process_id == IsoSystemLifeCycleProcesses.id
+        ).order_by(
+            IsoProcesses.life_cycle_process_id,
+            IsoProcesses.id
+        ).all()
+
+        # Group by lifecycle for frontend convenience
+        grouped = {}
+        flat_list = []
+
+        for p in processes:
+            process_data = {
+                'id': p.id,
+                'name': p.name,
+                'description': p.description,
+                'lifecycle_id': p.life_cycle_process_id,
+                'lifecycle_name': p.lifecycle_name
+            }
+            flat_list.append(process_data)
+
+            if p.lifecycle_name not in grouped:
+                grouped[p.lifecycle_name] = []
+            grouped[p.lifecycle_name].append(process_data)
+
+        print(f"[get_all_iso_processes] Returning {len(flat_list)} ISO processes")
+
+        return jsonify({
+            'status': 'success',
+            'processes': flat_list,
+            'grouped': grouped,
+            'total': len(flat_list)
+        }), 200
+
+    except Exception as e:
+        print(f"[get_all_iso_processes] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main_bp.route('/updateProcessSelection', methods=['POST'])
+def update_process_selection():
+    """
+    Update user's process selection after manual modification.
+    - Updates unknown_role_process_matrix with new selections
+    - Re-runs stored procedure to recalculate competencies
+
+    Used in Phase 2 task-based pathway when user modifies LLM-identified processes.
+
+    Request body:
+    {
+        "username": "phase2_task_11_xxx",
+        "organizationId": 11,
+        "processes": [
+            {"process_name": "Implementation", "involvement": "Responsible"},
+            {"process_name": "Verification", "involvement": "Supporting"}
+        ]
+    }
+
+    Response:
+    {
+        "status": "success",
+        "processes": [...],
+        "competencies_updated": true
+    }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "No input provided"}), 400
+
+        username = data.get('username')
+        organization_id = data.get('organizationId')
+        processes = data.get('processes', [])
+
+        if not username or not organization_id:
+            return jsonify({"error": "Username and organizationId required"}), 400
+
+        if not processes:
+            return jsonify({"error": "At least one process must be selected"}), 400
+
+        print(f"[updateProcessSelection] Updating for user: {username}, org: {organization_id}")
+        print(f"[updateProcessSelection] Processes to update: {len(processes)}")
+
+        from models import UnknownRoleProcessMatrix, IsoProcesses, db
+        from sqlalchemy import text
+
+        # Fetch all ISO processes for name-to-ID mapping
+        iso_processes = IsoProcesses.query.with_entities(
+            IsoProcesses.id,
+            IsoProcesses.name
+        ).all()
+        iso_process_map = {
+            process.name.strip().lower(): process.id
+            for process in iso_processes
+        }
+
+        # Involvement value mapping
+        involvement_values = {
+            "Responsible": 2,
+            "Supporting": 1,
+            "Designing": 4,
+            "Not performing": 0
+        }
+
+        # Build map of selected processes
+        selected_process_map = {}
+        for process in processes:
+            name = process.get('process_name', '').strip().lower()
+            # Remove " process" suffix if present (for LLM output compatibility)
+            if name.endswith(' process'):
+                name = name[:-8]
+            involvement = process.get('involvement', 'Not performing')
+            selected_process_map[name] = involvement_values.get(involvement, 0)
+
+        print(f"[updateProcessSelection] Selected processes map: {list(selected_process_map.keys())}")
+
+        # Delete existing entries for this user
+        deleted_count = UnknownRoleProcessMatrix.query.filter_by(
+            user_name=username,
+            organization_id=organization_id
+        ).delete()
+        print(f"[updateProcessSelection] Deleted {deleted_count} existing rows")
+
+        # Insert ALL 30 processes (with 0 for unselected)
+        rows_to_insert = []
+        for iso_process in iso_processes:
+            process_name = iso_process.name.strip().lower()
+
+            # Check if this process is in selected list
+            if process_name in selected_process_map:
+                role_process_value = selected_process_map[process_name]
+            else:
+                role_process_value = 0  # Not performing
+
+            rows_to_insert.append(UnknownRoleProcessMatrix(
+                user_name=username,
+                iso_process_id=iso_process.id,
+                role_process_value=role_process_value,
+                organization_id=organization_id
+            ))
+
+        if rows_to_insert:
+            db.session.bulk_save_objects(rows_to_insert)
+            db.session.commit()
+            print(f"[updateProcessSelection] Inserted {len(rows_to_insert)} process rows")
+
+        # Re-run stored procedure to recalculate competencies
+        competencies_updated = False
+        try:
+            print(f"[updateProcessSelection] Calling stored procedure...")
+            db.session.execute(
+                text("CALL update_unknown_role_competency_values(:username, :organization_id);"),
+                {"username": username, "organization_id": organization_id}
+            )
+            db.session.commit()
+            print(f"[updateProcessSelection] Stored procedure completed successfully")
+            competencies_updated = True
+        except Exception as proc_error:
+            print(f"[updateProcessSelection] Stored procedure error: {str(proc_error)}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the whole request - user can still proceed
+
+        # Return updated process list for frontend
+        response_processes = [
+            {
+                "process_name": p.get('process_name'),
+                "involvement": p.get('involvement')
+            }
+            for p in processes
+        ]
+
+        return jsonify({
+            "status": "success",
+            "processes": response_processes,
+            "competencies_updated": competencies_updated,
+            "message": "Process selection updated successfully"
+        }), 200
+
+    except Exception as e:
+        print(f"[updateProcessSelection] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
 @main_bp.route('/phase1/roles/suggest-from-processes', methods=['POST'])
 def suggest_role_from_processes():
     """

@@ -1,1086 +1,797 @@
 <template>
   <div class="phase-three">
+    <!-- Phase Header -->
     <div class="phase-header">
       <div class="phase-indicator">
         <div class="phase-number">3</div>
         <div class="phase-title">
           <h1>Phase 3: Macro Planning</h1>
-          <p>Select learning modules and qualification formats</p>
+          <p>Building Trainings Structure and Plan</p>
         </div>
       </div>
-      <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: `${(currentStep / totalSteps) * 100}%` }"></div>
+
+      <!-- Overall Progress -->
+      <div class="phase-progress">
+        <el-progress
+          :percentage="overallProgress"
+          :color="progressColors"
+          :stroke-width="10"
+        />
+        <span class="progress-text">{{ overallProgress }}% Complete</span>
       </div>
     </div>
 
-    <div class="step-indicator">
-      <div
-        v-for="step in totalSteps"
-        :key="step"
-        class="step-dot"
-        :class="{
-          'active': step === currentStep,
-          'completed': step < currentStep
-        }"
-      >
-        {{ step }}
-      </div>
+    <!-- Loading State -->
+    <div v-if="loadingConfig" class="loading-state">
+      <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+      <p>Loading Phase 3 configuration...</p>
     </div>
 
-    <!-- Step 1: Competency Gap Analysis -->
-    <div v-if="currentStep === 1" class="step-content">
-      <div class="step-header">
-        <h2><i class="el-icon-data-analysis"></i> Competency Gap Analysis</h2>
-        <p>Review your competency assessment results to identify qualification priorities</p>
-      </div>
-
-      <div class="gap-analysis">
-        <el-card class="analysis-summary">
-          <template #header>
-            <span>Assessment Summary</span>
-          </template>
-          <div class="summary-stats">
-            <div class="stat-item">
-              <div class="stat-value">{{ assessmentData.totalCompetencies }}</div>
-              <div class="stat-label">Total Competencies</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ assessmentData.averageScore }}%</div>
-              <div class="stat-label">Average Score</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ gapAnalysis.criticalGaps }}</div>
-              <div class="stat-label">Critical Gaps</div>
-            </div>
-          </div>
-        </el-card>
-
-        <el-card class="competency-gaps">
-          <template #header>
-            <span>Competency Gaps by Priority</span>
-          </template>
-          <div class="gap-list">
-            <div
-              v-for="gap in gapAnalysis.gaps"
-              :key="gap.competency_id"
-              class="gap-item"
-              :class="gap.priority"
-            >
-              <div class="gap-info">
-                <h4>{{ gap.competency_name }}</h4>
-                <p>{{ gap.description }}</p>
-                <div class="gap-details">
-                  <span class="current-level">Current: Level {{ gap.current_level }}</span>
-                  <span class="target-level">Target: Level {{ gap.target_level }}</span>
-                </div>
-              </div>
-              <div class="gap-priority">
-                <el-tag :type="getPriorityType(gap.priority)">
-                  {{ gap.priority.toUpperCase() }}
-                </el-tag>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </div>
-
-      <div class="step-actions">
-        <el-button @click="previousStep" :disabled="currentStep === 1">Previous</el-button>
-        <el-button type="primary" @click="nextStep">Continue to Module Selection</el-button>
-      </div>
-    </div>
-
-    <!-- Step 2: Module Selection -->
-    <div v-if="currentStep === 2" class="step-content">
-      <div class="step-header">
-        <h2><i class="el-icon-collection"></i> Qualification Module Selection</h2>
-        <p>Select modules that address your competency gaps and align with your learning objectives</p>
-      </div>
-
-      <div class="module-selection">
-        <div class="selection-filters">
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-select v-model="filters.priority" placeholder="Filter by Priority">
-                <el-option label="All Priorities" value=""></el-option>
-                <el-option label="Critical" value="critical"></el-option>
-                <el-option label="High" value="high"></el-option>
-                <el-option label="Medium" value="medium"></el-option>
-              </el-select>
-            </el-col>
-            <el-col :span="8">
-              <el-select v-model="filters.format" placeholder="Filter by Format">
-                <el-option label="All Formats" value=""></el-option>
-                <el-option label="Online" value="online"></el-option>
-                <el-option label="In-Person" value="in-person"></el-option>
-                <el-option label="Hybrid" value="hybrid"></el-option>
-              </el-select>
-            </el-col>
-            <el-col :span="8">
-              <el-select v-model="filters.duration" placeholder="Filter by Duration">
-                <el-option label="All Durations" value=""></el-option>
-                <el-option label="Short (≤ 2 days)" value="short"></el-option>
-                <el-option label="Medium (3-5 days)" value="medium"></el-option>
-                <el-option label="Long (> 5 days)" value="long"></el-option>
-              </el-select>
-            </el-col>
-          </el-row>
+    <!-- Main Content -->
+    <template v-else>
+      <!-- Task Navigation Cards (Dashboard View) -->
+      <div v-if="currentTask === 0" class="dashboard-view">
+        <div class="tasks-overview">
+          <h2>Phase 3 Tasks</h2>
+          <p class="tasks-description">
+            Complete these three tasks to plan your SE training program structure,
+            select learning formats, and generate timeline estimates.
+          </p>
         </div>
 
-        <div class="modules-grid">
+        <div class="task-cards">
+          <!-- Task 1: Training Structure -->
           <div
-            v-for="module in filteredModules"
-            :key="module.id"
-            class="module-card"
-            :class="{ 'selected': selectedModules.includes(module.id) }"
-            @click="toggleModule(module.id)"
+            class="task-card"
+            :class="{
+              'completed': taskStatus.task1,
+              'active': !taskStatus.task1
+            }"
+            @click="goToTask(1)"
           >
-            <div class="module-header">
-              <h4>{{ module.title }}</h4>
-              <el-tag :type="getPriorityType(module.priority)">{{ module.priority }}</el-tag>
+            <div class="task-icon">
+              <el-icon :size="32"><Grid /></el-icon>
             </div>
-            <div class="module-content">
-              <p>{{ module.description }}</p>
-              <div class="module-details">
-                <div class="detail-item">
-                  <i class="el-icon-time"></i>
-                  <span>{{ module.duration }}</span>
-                </div>
-                <div class="detail-item">
-                  <i class="el-icon-location"></i>
-                  <span>{{ module.format }}</span>
-                </div>
-                <div class="detail-item">
-                  <i class="el-icon-star"></i>
-                  <span>{{ module.competencies.length }} competencies</span>
-                </div>
-              </div>
-              <div class="competency-tags">
-                <el-tag
-                  v-for="comp in module.competencies.slice(0, 3)"
-                  :key="comp"
-                  size="small"
-                >
-                  {{ comp }}
+            <div class="task-content">
+              <h3>Task 1: Training Structure</h3>
+              <p>Choose how to organize your training program</p>
+              <div class="task-status">
+                <el-tag v-if="taskStatus.task1" type="success" effect="plain">
+                  <el-icon><View /></el-icon> View / Edit
                 </el-tag>
-                <span v-if="module.competencies.length > 3" class="more-competencies">
-                  +{{ module.competencies.length - 3 }} more
-                </span>
+                <el-tag v-else type="primary" effect="plain">
+                  <el-icon><ArrowRight /></el-icon> Start
+                </el-tag>
+              </div>
+              <div v-if="taskStatus.task1 && selectedView" class="task-result">
+                Selected: {{ selectedView === 'competency_level' ? 'Competency-Level Based' : 'Role-Clustered Based' }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Task 2: Learning Formats -->
+          <div
+            class="task-card"
+            :class="{
+              'completed': taskStatus.task2,
+              'active': taskStatus.task1 && !taskStatus.task2,
+              'disabled': !taskStatus.task1 && !taskStatus.task2
+            }"
+            @click="(taskStatus.task1 || taskStatus.task2) && goToTask(2)"
+          >
+            <div class="task-icon">
+              <el-icon :size="32"><Reading /></el-icon>
+            </div>
+            <div class="task-content">
+              <h3>Task 2: Learning Formats</h3>
+              <p>Select learning format for each training module</p>
+              <div class="task-status">
+                <el-tag v-if="taskStatus.task2" type="success" effect="plain">
+                  <el-icon><View /></el-icon> View / Edit
+                </el-tag>
+                <el-tag v-else-if="taskStatus.task1" type="primary" effect="plain">
+                  <el-icon><ArrowRight /></el-icon> Continue
+                </el-tag>
+                <el-tag v-else type="info" effect="plain">
+                  <el-icon><Lock /></el-icon> Locked
+                </el-tag>
+              </div>
+              <div v-if="taskProgress.modulesConfigured > 0" class="task-result">
+                {{ taskProgress.modulesConfigured }}/{{ taskProgress.totalModules }} modules configured
+              </div>
+            </div>
+          </div>
+
+          <!-- Task 3: Timeline Planning -->
+          <div
+            class="task-card"
+            :class="{
+              'completed': taskStatus.task3,
+              'active': taskStatus.task2 && !taskStatus.task3,
+              'disabled': !taskStatus.task2 && !taskStatus.task3
+            }"
+            @click="(taskStatus.task2 || taskStatus.task3) && goToTask(3)"
+          >
+            <div class="task-icon">
+              <el-icon :size="32"><Calendar /></el-icon>
+            </div>
+            <div class="task-content">
+              <h3>Task 3: Timeline Planning</h3>
+              <p>View LLM-generated timeline estimates</p>
+              <div class="task-status">
+                <el-tag v-if="taskStatus.task3" type="success" effect="plain">
+                  <el-icon><View /></el-icon> View / Edit
+                </el-tag>
+                <el-tag v-else-if="taskStatus.task2" type="primary" effect="plain">
+                  <el-icon><ArrowRight /></el-icon> Continue
+                </el-tag>
+                <el-tag v-else type="info" effect="plain">
+                  <el-icon><Lock /></el-icon> Locked
+                </el-tag>
+              </div>
+              <div v-if="taskStatus.task3" class="task-result">
+                Timeline generated
               </div>
             </div>
           </div>
         </div>
 
-        <div class="selection-summary">
-          <el-card>
-            <template #header>
-              <span>Selected Modules ({{ selectedModules.length }})</span>
-            </template>
-            <div v-if="selectedModules.length === 0" class="empty-selection">
-              <p>No modules selected yet. Choose modules that address your competency gaps.</p>
+        <!-- Phase 3 Complete Banner -->
+        <div v-if="taskStatus.task3" class="phase-complete-banner">
+          <div class="complete-banner-content">
+            <div class="banner-header">
+              <el-icon :size="24" color="#67C23A"><CircleCheckFilled /></el-icon>
+              <span class="banner-title">All Tasks Complete</span>
             </div>
-            <div v-else class="selected-summary">
-              <div class="summary-stats">
-                <div class="stat">
-                  <strong>{{ totalDuration }}</strong> total training days
-                </div>
-                <div class="stat">
-                  <strong>{{ coveragePercentage }}%</strong> gap coverage
-                </div>
-              </div>
-            </div>
-          </el-card>
-        </div>
-      </div>
-
-      <div class="step-actions">
-        <el-button @click="previousStep">Previous</el-button>
-        <el-button
-          type="primary"
-          @click="nextStep"
-          :disabled="selectedModules.length === 0"
-        >
-          Continue to Format Optimization
-        </el-button>
-      </div>
-    </div>
-
-    <!-- Step 3: Format Optimization -->
-    <div v-if="currentStep === 3" class="step-content">
-      <div class="step-header">
-        <h2><i class="el-icon-setting"></i> Training Format Optimization</h2>
-        <p>Optimize training formats based on your preferences, schedule, and organizational constraints</p>
-      </div>
-
-      <div class="format-optimization">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-card class="preferences-card">
-              <template #header>
-                <span>Learning Preferences</span>
-              </template>
-              <el-form :model="preferences" label-width="140px">
-                <el-form-item label="Preferred Format">
-                  <el-radio-group v-model="preferences.format">
-                    <el-radio label="online">Online</el-radio>
-                    <el-radio label="in-person">In-Person</el-radio>
-                    <el-radio label="hybrid">Hybrid</el-radio>
-                    <el-radio label="flexible">Flexible</el-radio>
-                  </el-radio-group>
-                </el-form-item>
-                <el-form-item label="Time Availability">
-                  <el-select v-model="preferences.timeAvailability" placeholder="Select availability">
-                    <el-option label="Full-time blocks" value="full-time"></el-option>
-                    <el-option label="Part-time (evenings)" value="part-time"></el-option>
-                    <el-option label="Weekends only" value="weekends"></el-option>
-                    <el-option label="Flexible schedule" value="flexible"></el-option>
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="Learning Pace">
-                  <el-slider
-                    v-model="preferences.pace"
-                    :min="1"
-                    :max="5"
-                    show-stops
-                    :format-tooltip="formatPaceTooltip"
-                  ></el-slider>
-                </el-form-item>
-                <el-form-item label="Group Size">
-                  <el-radio-group v-model="preferences.groupSize">
-                    <el-radio label="individual">Individual</el-radio>
-                    <el-radio label="small">Small Group (3-8)</el-radio>
-                    <el-radio label="large">Large Group (9+)</el-radio>
-                  </el-radio-group>
-                </el-form-item>
-              </el-form>
-            </el-card>
-          </el-col>
-          <el-col :span="12">
-            <el-card class="constraints-card">
-              <template #header>
-                <span>Organizational Constraints</span>
-              </template>
-              <el-form :model="constraints" label-width="140px">
-                <el-form-item label="Budget Range">
-                  <el-select v-model="constraints.budget" placeholder="Select budget range">
-                    <el-option label="< €5,000" value="low"></el-option>
-                    <el-option label="€5,000 - €15,000" value="medium"></el-option>
-                    <el-option label="> €15,000" value="high"></el-option>
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="Timeline">
-                  <el-date-picker
-                    v-model="constraints.timeline"
-                    type="daterange"
-                    range-separator="to"
-                    start-placeholder="Start date"
-                    end-placeholder="End date"
-                  ></el-date-picker>
-                </el-form-item>
-                <el-form-item label="Location">
-                  <el-input v-model="constraints.location" placeholder="Preferred location"></el-input>
-                </el-form-item>
-                <el-form-item label="Travel Restrictions">
-                  <el-switch v-model="constraints.noTravel" active-text="No travel allowed"></el-switch>
-                </el-form-item>
-              </el-form>
-            </el-card>
-          </el-col>
-        </el-row>
-
-        <el-card class="optimization-results">
-          <template #header>
-            <span>Optimized Training Plan</span>
-            <el-button
-              type="text"
-              @click="generateOptimizedPlan"
-              :loading="optimizing"
-              style="float: right;"
-            >
-              <i class="el-icon-refresh"></i> Re-optimize
-            </el-button>
-          </template>
-          <div v-if="optimizedPlan.length === 0" class="empty-plan">
-            <el-button type="primary" @click="generateOptimizedPlan" :loading="optimizing">
-              Generate Optimized Plan
-            </el-button>
-          </div>
-          <div v-else class="plan-timeline">
-            <div
-              v-for="(item, index) in optimizedPlan"
-              :key="index"
-              class="timeline-item"
-            >
-              <div class="timeline-marker"></div>
-              <div class="timeline-content">
-                <h4>{{ item.title }}</h4>
-                <p>{{ item.description }}</p>
-                <div class="timeline-details">
-                  <span class="timeline-date">{{ formatDate(item.startDate) }} - {{ formatDate(item.endDate) }}</span>
-                  <span class="timeline-format">{{ item.format }}</span>
-                  <span class="timeline-duration">{{ item.duration }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </div>
-
-      <div class="step-actions">
-        <el-button @click="previousStep">Previous</el-button>
-        <el-button
-          type="primary"
-          @click="nextStep"
-          :disabled="optimizedPlan.length === 0"
-        >
-          Continue to Review
-        </el-button>
-      </div>
-    </div>
-
-    <!-- Step 4: Review & Confirmation -->
-    <div v-if="currentStep === 4" class="step-content">
-      <div class="step-header">
-        <h2><i class="el-icon-document"></i> Review & Confirmation</h2>
-        <p>Review your qualification plan before proceeding to Phase 4</p>
-      </div>
-
-      <div class="review-content">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-card class="review-summary">
-              <template #header>
-                <span>Plan Summary</span>
-              </template>
-              <div class="summary-item">
-                <strong>Selected Modules:</strong> {{ selectedModules.length }}
-              </div>
-              <div class="summary-item">
-                <strong>Total Duration:</strong> {{ totalDuration }} days
-              </div>
-              <div class="summary-item">
-                <strong>Competency Coverage:</strong> {{ coveragePercentage }}%
-              </div>
-              <div class="summary-item">
-                <strong>Preferred Format:</strong> {{ preferences.format }}
-              </div>
-              <div class="summary-item">
-                <strong>Timeline:</strong> {{ formatDateRange(constraints.timeline) }}
-              </div>
-            </el-card>
-          </el-col>
-          <el-col :span="12">
-            <el-card class="review-objectives">
-              <template #header>
-                <span>Learning Objectives Alignment</span>
-              </template>
-              <div
-                v-for="objective in alignedObjectives"
-                :key="objective.id"
-                class="objective-item"
+            <p>Your training program structure and timeline are ready. Click on any task above to review or modify your selections, or complete Phase 3 to proceed.</p>
+            <div class="banner-actions">
+              <el-button
+                type="success"
+                size="large"
+                :loading="exporting"
+                @click="exportToExcel"
               >
-                <div class="objective-text">{{ objective.text }}</div>
-                <div class="objective-coverage">
-                  <el-progress
-                    :percentage="objective.coverage"
-                    :stroke-width="6"
-                    text-inside
-                  ></el-progress>
-                </div>
-              </div>
-            </el-card>
-          </el-col>
-        </el-row>
+                <el-icon><Download /></el-icon>
+                Export to Excel
+              </el-button>
+              <el-button type="primary" size="large" @click="proceedToPhase4">
+                Complete Phase 3 &amp; Proceed
+                <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <el-card class="plan-confirmation">
-          <template #header>
-            <span>Qualification Plan Confirmation</span>
-          </template>
-          <el-checkbox v-model="confirmations.planReviewed">
-            I have reviewed the qualification plan and selected modules
-          </el-checkbox>
-          <el-checkbox v-model="confirmations.objectivesAligned">
-            The plan aligns with my learning objectives and competency gaps
-          </el-checkbox>
-          <el-checkbox v-model="confirmations.constraintsConsidered">
-            Organizational constraints and preferences have been considered
-          </el-checkbox>
-          <el-checkbox v-model="confirmations.readyToProceed">
-            I am ready to proceed to Phase 4 (Cohort Formation)
-          </el-checkbox>
+      <!-- Task 1 Content -->
+      <div v-else-if="currentTask === 1" class="task-content-area">
+        <div class="task-header">
+          <el-button text @click="backToDashboard">
+            <el-icon><ArrowLeft /></el-icon>
+            Back to Overview
+          </el-button>
+          <div class="task-title">
+            <span class="task-number">Task 1</span>
+            <h2>Choose Training Structure</h2>
+          </div>
+        </div>
+
+        <el-card class="task-card-content">
+          <TrainingStructureSelection
+            :organization-id="organizationId"
+            @structure-selected="handleStructureSelected"
+            @completed="handleTask1Completed"
+          />
         </el-card>
       </div>
 
-      <div class="step-actions">
-        <el-button @click="previousStep">Previous</el-button>
-        <el-button
-          type="success"
-          @click="completePhase"
-          :disabled="!allConfirmationsChecked"
-          :loading="completing"
-        >
-          Complete Phase 3
-        </el-button>
+      <!-- Task 2 Content -->
+      <div v-else-if="currentTask === 2" class="task-content-area">
+        <div class="task-header">
+          <el-button text @click="backToDashboard">
+            <el-icon><ArrowLeft /></el-icon>
+            Back to Overview
+          </el-button>
+          <div class="task-title">
+            <span class="task-number">Task 2</span>
+            <h2>Select Learning Formats</h2>
+          </div>
+        </div>
+
+        <el-card class="task-card-content">
+          <LearningFormatSelection
+            :organization-id="organizationId"
+            :selected-view="selectedView"
+            @back="goToTask(1)"
+            @completed="handleTask2Completed"
+          />
+        </el-card>
       </div>
-    </div>
+
+      <!-- Task 3 Content -->
+      <div v-else-if="currentTask === 3" class="task-content-area">
+        <div class="task-header">
+          <el-button text @click="backToDashboard">
+            <el-icon><ArrowLeft /></el-icon>
+            Back to Overview
+          </el-button>
+          <div class="task-title">
+            <span class="task-number">Task 3</span>
+            <h2>Timeline Planning</h2>
+          </div>
+        </div>
+
+        <el-card class="task-card-content">
+          <TimelinePlanning
+            :organization-id="organizationId"
+            @back="goToTask(2)"
+            @completed="handleTask3Completed"
+          />
+        </el-card>
+      </div>
+    </template>
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import {
+  Loading, Grid, Reading, Calendar, Check, ArrowRight, ArrowLeft,
+  Lock, CircleCheckFilled, View, Download
+} from '@element-plus/icons-vue'
 import axios from '@/api/axios'
+import { useAuthStore } from '@/stores/auth'
 
-export default {
-  name: 'PhaseThree',
-  setup() {
-    const router = useRouter()
-    const currentStep = ref(1)
-    const totalSteps = 4
-    const optimizing = ref(false)
-    const completing = ref(false)
+// Components
+import TrainingStructureSelection from '@/components/phase3/task1/TrainingStructureSelection.vue'
+import LearningFormatSelection from '@/components/phase3/task2/LearningFormatSelection.vue'
+import TimelinePlanning from '@/components/phase3/task3/TimelinePlanning.vue'
 
-    // Assessment data from Phase 2
-    const assessmentData = ref({
-      totalCompetencies: 16,
-      averageScore: 68,
-      roleId: null
-    })
+const router = useRouter()
+const authStore = useAuthStore()
 
-    // Gap analysis results
-    const gapAnalysis = ref({
-      criticalGaps: 4,
-      gaps: []
-    })
+// State
+const loadingConfig = ref(true)
+const organizationId = ref(null)
+const currentTask = ref(0) // 0 = dashboard, 1-3 = tasks
+const selectedView = ref('competency_level')
+const exporting = ref(false)
+const taskStatus = ref({
+  task1: false,
+  task2: false,
+  task3: false
+})
+const taskProgress = ref({
+  totalModules: 0,
+  modulesConfigured: 0
+})
 
-    // Available modules
-    const availableModules = ref([])
-    const selectedModules = ref([])
+// Progress colors
+const progressColors = [
+  { color: '#F56C6C', percentage: 25 },
+  { color: '#E6A23C', percentage: 50 },
+  { color: '#409EFF', percentage: 75 },
+  { color: '#67C23A', percentage: 100 }
+]
 
-    // Filters for module selection
-    const filters = ref({
-      priority: '',
-      format: '',
-      duration: ''
-    })
+// Computed
+const overallProgress = computed(() => {
+  let progress = 0
+  if (taskStatus.value.task1) progress += 33
+  if (taskStatus.value.task2) progress += 34
+  if (taskStatus.value.task3) progress += 33
+  return progress
+})
 
-    // Learning preferences
-    const preferences = ref({
-      format: 'hybrid',
-      timeAvailability: 'flexible',
-      pace: 3,
-      groupSize: 'small'
-    })
+// Methods
+const initializeOrganization = async () => {
+  // Get organization ID from auth store (like PhaseOne does)
+  const orgId = authStore.organizationId
 
-    // Organizational constraints
-    const constraints = ref({
-      budget: 'medium',
-      timeline: null,
-      location: '',
-      noTravel: false
-    })
+  if (!orgId) {
+    console.error('[Phase3] No organization ID found in auth store')
+    ElMessage.error('Please log in to access Phase 3')
+    loadingConfig.value = false
+    return
+  }
 
-    // Optimized plan
-    const optimizedPlan = ref([])
+  organizationId.value = orgId
+  await loadPhase3Config()
+}
 
-    // Aligned objectives
-    const alignedObjectives = ref([])
+const loadPhase3Config = async () => {
+  loadingConfig.value = true
+  try {
+    const response = await axios.get(`/api/phase3/config/${organizationId.value}`)
 
-    // Confirmations
-    const confirmations = ref({
-      planReviewed: false,
-      objectivesAligned: false,
-      constraintsConsidered: false,
-      readyToProceed: false
-    })
+    if (response.data.success) {
+      const config = response.data.config
 
-    // Computed properties
-    const filteredModules = computed(() => {
-      return availableModules.value.filter(module => {
-        if (filters.value.priority && module.priority !== filters.value.priority) return false
-        if (filters.value.format && module.format !== filters.value.format) return false
-        if (filters.value.duration && module.durationCategory !== filters.value.duration) return false
-        return true
-      })
-    })
+      // Set task completion status
+      taskStatus.value = {
+        task1: config.task1_completed || false,
+        task2: config.task2_completed || false,
+        task3: config.task3_completed || false
+      }
 
-    const totalDuration = computed(() => {
-      return availableModules.value
-        .filter(module => selectedModules.value.includes(module.id))
-        .reduce((total, module) => total + module.durationDays, 0)
-    })
+      selectedView.value = config.selected_view || 'competency_level'
 
-    const coveragePercentage = computed(() => {
-      const coveredGaps = gapAnalysis.value.gaps.filter(gap => {
-        return availableModules.value
-          .filter(module => selectedModules.value.includes(module.id))
-          .some(module => module.competencies.includes(gap.competency_name))
-      }).length
-      return Math.round((coveredGaps / gapAnalysis.value.gaps.length) * 100)
-    })
-
-    const allConfirmationsChecked = computed(() => {
-      return Object.values(confirmations.value).every(Boolean)
-    })
-
-    // Methods
-    const loadAssessmentData = async () => {
-      try {
-        const response = await axios.get('/api/assessments/latest')
-        assessmentData.value = response.data
-        await loadGapAnalysis()
-      } catch (error) {
-        console.error('Error loading assessment data:', error)
-        ElMessage.error('Failed to load assessment data')
+      // Load module progress if Task 1 is done
+      if (taskStatus.value.task1) {
+        await loadModuleProgress()
       }
     }
-
-    const loadGapAnalysis = async () => {
-      try {
-        const response = await axios.post('/api/assessments/gap-analysis', {
-          assessment_id: assessmentData.value.id
-        })
-        gapAnalysis.value = response.data
-      } catch (error) {
-        console.error('Error loading gap analysis:', error)
-        ElMessage.error('Failed to analyze competency gaps')
-      }
-    }
-
-    const loadAvailableModules = async () => {
-      try {
-        const response = await axios.get('/api/modules', {
-          params: {
-            gaps: gapAnalysis.value.gaps.map(g => g.competency_id)
-          }
-        })
-        availableModules.value = response.data
-      } catch (error) {
-        console.error('Error loading modules:', error)
-        ElMessage.error('Failed to load qualification modules')
-      }
-    }
-
-    const toggleModule = (moduleId) => {
-      const index = selectedModules.value.indexOf(moduleId)
-      if (index > -1) {
-        selectedModules.value.splice(index, 1)
-      } else {
-        selectedModules.value.push(moduleId)
-      }
-    }
-
-    const generateOptimizedPlan = async () => {
-      optimizing.value = true
-      try {
-        const response = await axios.post('/api/optimization/plan', {
-          selectedModules: selectedModules.value,
-          preferences: preferences.value,
-          constraints: constraints.value
-        })
-        optimizedPlan.value = response.data.timeline
-        alignedObjectives.value = response.data.objectives
-        ElMessage.success('Training plan optimized successfully')
-      } catch (error) {
-        console.error('Error optimizing plan:', error)
-        ElMessage.error('Failed to optimize training plan')
-      } finally {
-        optimizing.value = false
-      }
-    }
-
-    const nextStep = () => {
-      if (currentStep.value < totalSteps) {
-        currentStep.value++
-        if (currentStep.value === 3 && optimizedPlan.value.length === 0) {
-          generateOptimizedPlan()
-        }
-      }
-    }
-
-    const previousStep = () => {
-      if (currentStep.value > 1) {
-        currentStep.value--
-      }
-    }
-
-    const completePhase = async () => {
-      completing.value = true
-      try {
-        await axios.post('/api/phases/3/complete', {
-          selectedModules: selectedModules.value,
-          optimizedPlan: optimizedPlan.value,
-          preferences: preferences.value,
-          constraints: constraints.value
-        })
-
-        // Store completion data for phase progression
-        const phaseData = {
-          selectedModules: selectedModules.value,
-          optimizedPlan: optimizedPlan.value,
-          preferences: preferences.value,
-          constraints: constraints.value,
-          completedAt: new Date().toISOString()
-        }
-        localStorage.setItem('se-qpt-phase3-data', JSON.stringify(phaseData))
-
-        ElMessage.success('Phase 3 completed successfully!')
-        router.push('/app/phases/4')
-      } catch (error) {
-        console.error('Error completing phase:', error)
-        ElMessage.error('Failed to complete Phase 3')
-      } finally {
-        completing.value = false
-      }
-    }
-
-    // Utility methods
-    const getPriorityType = (priority) => {
-      const types = {
-        critical: 'danger',
-        high: 'warning',
-        medium: 'info',
-        low: 'success'
-      }
-      return types[priority] || 'info'
-    }
-
-    const formatPaceTooltip = (value) => {
-      const paces = {
-        1: 'Very Slow',
-        2: 'Slow',
-        3: 'Moderate',
-        4: 'Fast',
-        5: 'Very Fast'
-      }
-      return paces[value]
-    }
-
-    const formatDate = (date) => {
-      if (!date) return ''
-      return new Date(date).toLocaleDateString()
-    }
-
-    const formatDateRange = (range) => {
-      if (!range || !range[0] || !range[1]) return 'Not specified'
-      return `${formatDate(range[0])} - ${formatDate(range[1])}`
-    }
-
-    // Lifecycle
-    onMounted(async () => {
-      await loadAssessmentData()
-      await loadAvailableModules()
-    })
-
-    return {
-      currentStep,
-      totalSteps,
-      optimizing,
-      completing,
-      assessmentData,
-      gapAnalysis,
-      availableModules,
-      selectedModules,
-      filters,
-      preferences,
-      constraints,
-      optimizedPlan,
-      alignedObjectives,
-      confirmations,
-      filteredModules,
-      totalDuration,
-      coveragePercentage,
-      allConfirmationsChecked,
-      toggleModule,
-      generateOptimizedPlan,
-      nextStep,
-      previousStep,
-      completePhase,
-      getPriorityType,
-      formatPaceTooltip,
-      formatDate,
-      formatDateRange
-    }
+  } catch (error) {
+    console.error('Error loading Phase 3 config:', error)
+    ElMessage.error('Failed to load Phase 3 configuration')
+  } finally {
+    loadingConfig.value = false
   }
 }
+
+const loadModuleProgress = async () => {
+  try {
+    const response = await axios.get(`/api/phase3/training-modules/${organizationId.value}`)
+    if (response.data.success) {
+      const modules = response.data.modules || []
+      taskProgress.value = {
+        totalModules: modules.length,
+        modulesConfigured: modules.filter(m => m.confirmed).length
+      }
+    }
+  } catch (error) {
+    console.error('Error loading module progress:', error)
+  }
+}
+
+const goToTask = (taskNumber) => {
+  currentTask.value = taskNumber
+}
+
+const backToDashboard = () => {
+  currentTask.value = 0
+  loadPhase3Config() // Refresh status
+}
+
+const handleStructureSelected = (view) => {
+  selectedView.value = view
+}
+
+const handleTask1Completed = () => {
+  taskStatus.value.task1 = true
+  goToTask(2)
+}
+
+const handleTask2Completed = async () => {
+  try {
+    // Mark Task 2 as completed in the backend
+    await axios.post(`/api/phase3/complete-task2/${organizationId.value}`)
+    taskStatus.value.task2 = true
+    goToTask(3)
+  } catch (error) {
+    console.error('Error completing Task 2:', error)
+    // Still allow navigation even if API fails
+    taskStatus.value.task2 = true
+    goToTask(3)
+  }
+}
+
+const handleTask3Completed = () => {
+  taskStatus.value.task3 = true
+  ElMessage.success('Timeline generated successfully!')
+  backToDashboard()
+}
+
+const exportToExcel = async () => {
+  if (!organizationId.value) {
+    ElMessage.error('Organization not loaded')
+    return
+  }
+
+  exporting.value = true
+  try {
+    ElMessage.info('Preparing Excel export...')
+
+    const response = await axios.get(
+      `/api/phase3/export/${organizationId.value}`,
+      { responseType: 'blob' }
+    )
+
+    // Get filename from Content-Disposition header or generate default
+    let filename = null
+    const contentDisposition = response.headers['content-disposition']
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '')
+      }
+    }
+
+    // Fallback filename
+    if (!filename) {
+      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      filename = `Phase3_MacroPlanning_${timestamp}.xlsx`
+    }
+
+    // Trigger download
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+
+    ElMessage.success('Export completed successfully!')
+  } catch (error) {
+    console.error('Error exporting Phase 3:', error)
+    if (error.response?.status === 400) {
+      ElMessage.warning('Please complete all Phase 3 tasks before exporting.')
+    } else {
+      ElMessage.error('Failed to export. Please try again.')
+    }
+  } finally {
+    exporting.value = false
+  }
+}
+
+const proceedToPhase4 = async () => {
+  try {
+    // Mark Phase 3 as complete in the backend
+    console.log('[PhaseThree] Marking Phase 3 as complete...')
+    await axios.put('/api/organization/phase3-complete')
+    ElMessage.success('Phase 3 completed successfully!')
+    router.push('/app/dashboard')
+  } catch (error) {
+    console.error('Error completing Phase 3:', error)
+    ElMessage.error('Failed to complete Phase 3. Please try again.')
+  }
+}
+
+// Initialize
+onMounted(async () => {
+  // Ensure auth is loaded
+  if (!authStore.isAuthenticated) {
+    await authStore.checkAuth()
+  }
+  await initializeOrganization()
+})
 </script>
 
 <style scoped>
 .phase-three {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+  min-height: calc(100vh - 120px);
+  padding: 24px;
+  background: #f5f7fa;
 }
 
+.phase-three > * {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Phase Header - Matching Phase 1 design */
 .phase-header {
-  text-align: center;
-  margin-bottom: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+  padding: 24px;
+  background: linear-gradient(135deg, #26A69A 0%, #00897B 100%);
+  border-radius: 12px;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 137, 123, 0.3);
 }
 
 .phase-indicator {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 20px;
+  gap: 24px;
 }
 
 .phase-number {
-  width: 60px;
-  height: 60px;
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 3px solid rgba(255, 255, 255, 0.4);
   border-radius: 50%;
-  background: linear-gradient(135deg, #FF7043 0%, #F4511E 100%);
-  box-shadow: 0 4px 12px rgba(244, 81, 30, 0.25);
-  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
+  font-size: 2rem;
+  font-weight: 700;
+  color: white;
 }
 
 .phase-title h1 {
-  margin: 0;
-  color: #2c3e50;
+  margin: 0 0 8px 0;
+  font-size: 2rem;
+  font-weight: 600;
+  color: white;
 }
 
 .phase-title p {
-  margin: 5px 0 0 0;
-  color: #7f8c8d;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 6px;
-  background: #ecf0f1;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  transition: width 0.3s ease;
-}
-
-.step-indicator {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 40px;
-}
-
-.step-dot {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 2px solid #bdc3c7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  transition: all 0.3s ease;
-}
-
-.step-dot.active {
-  border-color: #667eea;
-  background: #667eea;
+  margin: 0;
+  opacity: 0.9;
+  font-size: 1.1rem;
   color: white;
 }
 
-.step-dot.completed {
-  border-color: #27ae60;
-  background: #27ae60;
+.phase-progress {
+  text-align: right;
+  min-width: 200px;
+}
+
+.phase-progress :deep(.el-progress__text) {
   color: white;
 }
 
-.step-content {
-  margin-bottom: 40px;
+.phase-progress :deep(.el-progress-bar__outer) {
+  background-color: rgba(255, 255, 255, 0.3);
 }
 
-.step-header {
-  text-align: center;
-  margin-bottom: 30px;
+.progress-text {
+  display: block;
+  margin-top: 8px;
+  font-weight: 500;
+  color: white;
 }
 
-.step-header h2 {
-  color: #2c3e50;
-  margin-bottom: 10px;
-}
-
-.step-actions {
+/* Loading State */
+.loading-state {
   display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 40px;
-}
-
-/* Gap Analysis Styles */
-.gap-analysis {
-  display: grid;
-  gap: 20px;
-}
-
-.analysis-summary .summary-stats {
-  display: flex;
-  justify-content: space-around;
-  text-align: center;
-}
-
-.stat-item {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 2em;
-  font-weight: bold;
-  color: #667eea;
-}
-
-.stat-label {
-  color: #7f8c8d;
-  margin-top: 5px;
-}
-
-.gap-list {
-  display: grid;
-  gap: 15px;
-}
-
-.gap-item {
-  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 15px;
-  border: 1px solid #ecf0f1;
-  border-radius: 8px;
-  transition: all 0.3s ease;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #909399;
 }
 
-.gap-item:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.loading-state p {
+  margin-top: 16px;
 }
 
-.gap-item.critical {
-  border-left: 4px solid #e74c3c;
+/* Dashboard View */
+.dashboard-view {
+  animation: fadeIn 0.3s ease;
 }
 
-.gap-item.high {
-  border-left: 4px solid #f39c12;
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.gap-item.medium {
-  border-left: 4px solid #3498db;
+.tasks-overview {
+  text-align: center;
+  margin-bottom: 32px;
 }
 
-.gap-info {
-  flex: 1;
+.tasks-overview h2 {
+  margin: 0 0 8px 0;
+  color: #303133;
 }
 
-.gap-info h4 {
-  margin: 0 0 5px 0;
-  color: #2c3e50;
+.tasks-description {
+  margin: 0;
+  color: #606266;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
-.gap-info p {
-  margin: 0 0 10px 0;
-  color: #7f8c8d;
-  font-size: 14px;
-}
-
-.gap-details {
-  display: flex;
-  gap: 15px;
-  font-size: 12px;
-}
-
-.gap-details span {
-  padding: 2px 8px;
-  background: #f8f9fa;
-  border-radius: 4px;
-}
-
-/* Module Selection Styles */
-.module-selection {
+/* Task Cards - Matching Phase 1 card styling */
+.task-cards {
   display: grid;
-  gap: 20px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 32px;
 }
 
-.selection-filters {
-  margin-bottom: 20px;
-}
-
-.modules-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
-}
-
-.module-card {
-  border: 2px solid #ecf0f1;
+.task-card {
+  padding: 24px;
+  background: white;
+  border: 1px solid #e9ecef;
   border-radius: 8px;
-  padding: 20px;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.module-card:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+.task-card:hover:not(.disabled) {
+  border-color: #26A69A;
+  box-shadow: 0 4px 16px rgba(0, 137, 123, 0.15);
+  transform: translateY(-2px);
 }
 
-.module-card.selected {
-  border-color: #667eea;
-  background: #f8f9ff;
+.task-card.active {
+  border-color: #26A69A;
+  background: linear-gradient(135deg, #E0F2F1 0%, #B2DFDB 100%);
 }
 
-.module-header {
+.task-card.completed {
+  border-color: #67C23A;
+  background: linear-gradient(135deg, #F0F9EB 0%, #E1F3D8 100%);
+}
+
+.task-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.task-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: #f8f9fa;
   display: flex;
-  justify-content: between;
   align-items: center;
-  margin-bottom: 15px;
+  justify-content: center;
+  margin-bottom: 16px;
+  color: #6c757d;
 }
 
-.module-header h4 {
-  margin: 0;
+.task-card.active .task-icon {
+  background: linear-gradient(135deg, #26A69A 0%, #00897B 100%);
+  color: white;
+}
+
+.task-card.completed .task-icon {
+  background: #67C23A;
+  color: white;
+}
+
+.task-content h3 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  font-weight: 600;
   color: #2c3e50;
-  flex: 1;
 }
 
-.module-content p {
-  color: #7f8c8d;
-  margin-bottom: 15px;
-  line-height: 1.5;
+.task-content p {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #6c757d;
 }
 
-.module-details {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 15px;
+.task-status {
+  margin-bottom: 8px;
 }
 
-.detail-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 14px;
-  color: #7f8c8d;
-}
-
-.competency-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-items: center;
-}
-
-.more-competencies {
+.task-result {
   font-size: 12px;
-  color: #7f8c8d;
-  margin-left: 5px;
-}
-
-/* Format Optimization Styles */
-.format-optimization {
-  display: grid;
-  gap: 20px;
-}
-
-.optimization-results {
-  margin-top: 20px;
-}
-
-.empty-plan {
-  text-align: center;
-  padding: 40px;
-}
-
-.plan-timeline {
-  position: relative;
-  padding-left: 30px;
-}
-
-.timeline-item {
-  position: relative;
-  margin-bottom: 30px;
-  padding-left: 30px;
-}
-
-.timeline-marker {
-  position: absolute;
-  left: -8px;
-  top: 5px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #667eea;
-  border: 3px solid white;
-  box-shadow: 0 0 0 2px #667eea;
-}
-
-.timeline-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 21px;
-  bottom: -30px;
-  width: 2px;
-  background: #ecf0f1;
-}
-
-.timeline-item:last-child::before {
-  display: none;
-}
-
-.timeline-content h4 {
-  margin: 0 0 5px 0;
-  color: #2c3e50;
-}
-
-.timeline-content p {
-  margin: 0 0 10px 0;
-  color: #7f8c8d;
-}
-
-.timeline-details {
-  display: flex;
-  gap: 15px;
-  font-size: 14px;
-}
-
-.timeline-details span {
-  padding: 2px 8px;
+  color: #6c757d;
+  padding: 8px;
   background: #f8f9fa;
   border-radius: 4px;
-  color: #7f8c8d;
 }
 
-/* Review Styles */
-.review-content {
-  margin-bottom: 30px;
+/* Phase Complete Banner */
+.phase-complete-banner {
+  margin-top: 24px;
 }
 
-.summary-item {
-  margin-bottom: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid #ecf0f1;
+.complete-banner-content {
+  padding: 24px;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-left: 4px solid #67C23A;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.objective-item {
-  margin-bottom: 15px;
+.banner-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.objective-text {
-  margin-bottom: 8px;
+.banner-title {
+  font-size: 18px;
+  font-weight: 600;
   color: #2c3e50;
 }
 
-.plan-confirmation {
-  margin-top: 20px;
+.complete-banner-content p {
+  margin: 0 0 16px 0;
+  color: #6c757d;
+  font-size: 14px;
 }
 
-.plan-confirmation .el-checkbox {
-  display: block;
-  margin-bottom: 15px;
+.banner-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Task Content Area - Matching Phase 1 step-card styling */
+.task-content-area {
+  animation: fadeIn 0.3s ease;
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.task-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.task-number {
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #26A69A 0%, #00897B 100%);
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.task-title h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.task-card-content {
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.task-card-content :deep(.el-card__body) {
+  padding: 24px;
+}
+
+/* Responsive - Matching Phase 1 responsive patterns */
+@media (max-width: 900px) {
+  .task-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .phase-three {
+    padding: 16px;
+  }
+
+  .phase-header {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+
+  .phase-indicator {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .phase-title h1 {
+    font-size: 1.5rem;
+  }
+
+  .phase-progress {
+    width: 100%;
+    text-align: center;
+  }
+
+  .task-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .task-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }
 </style>

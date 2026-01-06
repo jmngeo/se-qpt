@@ -34,20 +34,53 @@ try:
         db, Organization, Competency, StrategyTemplate, StrategyTemplateCompetency,
         OrganizationRoles, UserCompetencySurveyResult, UserAssessment,
         RoleCompetencyMatrix, UserRoleCluster, GeneratedLearningObjectives,
-        OrganizationPMTContext
+        OrganizationPMTContext, OrganizationExistingTraining
     )
 except ImportError:
     from app.models import (
         db, Organization, Competency, StrategyTemplate, StrategyTemplateCompetency,
         OrganizationRoles, UserCompetencySurveyResult, UserAssessment,
         RoleCompetencyMatrix, UserRoleCluster, GeneratedLearningObjectives,
-        OrganizationPMTContext
+        OrganizationPMTContext, OrganizationExistingTraining
     )
 
 logger = logging.getLogger(__name__)
 
 # Valid levels in pyramid structure
 VALID_LEVELS = [1, 2, 4, 6]
+
+
+# =============================================================================
+# EXISTING TRAINING EXCLUSION HELPER
+# Feature: "Check and Integrate Existing Offers" (Ulf's request - 11.12.2025)
+# =============================================================================
+
+def get_excluded_competency_ids(organization_id: int) -> set:
+    """
+    Get competency IDs that should be excluded from training requirements
+    because organization has existing training for them.
+
+    These competencies will be shown in "No Training Required" with
+    "Training Exists" tag instead of being in "Training Requirements Identified".
+
+    Args:
+        organization_id: Organization ID
+
+    Returns:
+        Set of competency IDs with existing training
+    """
+    try:
+        existing = OrganizationExistingTraining.query.filter_by(
+            organization_id=organization_id
+        ).all()
+        excluded_ids = {e.competency_id for e in existing}
+        if excluded_ids:
+            logger.info(f"[get_excluded_competency_ids] Org {organization_id}: "
+                       f"{len(excluded_ids)} competencies excluded (existing training)")
+        return excluded_ids
+    except Exception as e:
+        logger.warning(f"[get_excluded_competency_ids] Error: {str(e)}")
+        return set()
 
 
 # =============================================================================
@@ -157,6 +190,11 @@ def compute_input_hash(
         role_assignments,
         key=lambda x: (x['user_id'], x['role_id'])
     )
+
+    # Add excluded competencies (existing training) to hash
+    # This ensures cache invalidates when exclusions change
+    excluded_ids = get_excluded_competency_ids(org_id)
+    hash_input['excluded_competencies'] = sorted(excluded_ids)
 
     # Create deterministic JSON string
     hash_string = json.dumps(hash_input, sort_keys=True, default=str)
@@ -2397,6 +2435,11 @@ def structure_pyramid_output(
     all_competency_ids = get_all_competency_ids()
     gaps_by_competency = gaps_data.get('by_competency', {})
 
+    # Get excluded competencies (existing training offers)
+    excluded_comp_ids = get_excluded_competency_ids(org_id)
+    if excluded_comp_ids:
+        logger.info(f"[structure_pyramid_output] Excluding {len(excluded_comp_ids)} competencies with existing training")
+
     pyramid = {
         'levels': {},
         'metadata': {
@@ -2466,6 +2509,15 @@ def structure_pyramid_output(
                         # Use the minimum median (most common gap case)
                         current_level = min(role_medians)
 
+            # Check if competency has existing training (should be excluded)
+            has_existing_training = competency_id in excluded_comp_ids
+
+            # Override status if excluded due to existing training
+            if has_existing_training:
+                status = 'training_exists'
+                grayed_out = True
+                message = 'Training already exists in organization'
+
             # Build competency card data
             competency_card = {
                 'competency_id': competency_id,
@@ -2475,7 +2527,8 @@ def structure_pyramid_output(
                 'target_level': target_level,
                 'current_level': current_level,  # Add current level for UI display
                 'learning_objective': learning_objective,
-                'gap_data': gap_data if not grayed_out else None
+                'gap_data': gap_data if not grayed_out else None,
+                'has_existing_training': has_existing_training  # Flag for UI
             }
 
             if grayed_out:

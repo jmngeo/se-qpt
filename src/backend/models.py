@@ -48,6 +48,8 @@ class Organization(db.Model):
     maturity_score = db.Column(db.Float)  # Overall maturity score (0-5)
     selected_archetype = db.Column(db.String(100))  # Selected qualification archetype
     phase1_completed = db.Column(db.Boolean, default=False)
+    phase2_completed = db.Column(db.Boolean, default=False)
+    phase3_completed = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @staticmethod
@@ -72,6 +74,8 @@ class Organization(db.Model):
             'maturity_score': self.maturity_score,
             'selected_archetype': self.selected_archetype,
             'phase1_completed': self.phase1_completed,
+            'phase2_completed': self.phase2_completed,
+            'phase3_completed': self.phase3_completed,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

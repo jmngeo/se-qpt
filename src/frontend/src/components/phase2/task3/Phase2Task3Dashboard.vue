@@ -68,6 +68,18 @@
         />
       </div>
 
+      <!-- SECTION 1.5: Existing Training Check (Feature: Ulf's request 11.12.2025) -->
+      <div class="section-container">
+        <h2 class="section-heading">
+          <el-icon><Box /></el-icon>
+          Existing Training Check
+        </h2>
+        <ExistingTrainingsSelector
+          :organization-id="organizationId"
+          @updated="handleExistingTrainingsUpdated"
+        />
+      </div>
+
       <!-- SECTION 2: Organization SE Context (Conditional - Only if Needed) -->
       <div v-if="needsPMT" class="section-container">
         <h2 class="section-heading">
@@ -318,13 +330,15 @@ import {
   DataAnalysis,
   Setting,
   DocumentCopy,
-  Refresh
+  Refresh,
+  Box
 } from '@element-plus/icons-vue'
 import { usePhase2Task3 } from '@/composables/usePhase2Task3'
 import AssessmentMonitor from './AssessmentMonitor.vue'
 import PMTContextForm from './PMTContextForm.vue'
 import GenerationConfirmDialog from './GenerationConfirmDialog.vue'
 import AddStrategyDialog from './AddStrategyDialog.vue'
+import ExistingTrainingsSelector from './ExistingTrainingsSelector.vue'
 
 const props = defineProps({
   organizationId: {
@@ -466,6 +480,12 @@ const handlePMTSaved = (savedContext) => {
   showPMTEdit.value = false  // Hide the edit form
   ElMessage.success('PMT context saved successfully')
   refreshData()
+}
+
+const handleExistingTrainingsUpdated = () => {
+  // Refresh prerequisites/data since exclusions changed
+  refreshData()
+  ElMessage.info('Note: You may need to regenerate learning objectives to apply changes.')
 }
 
 const handleExport = (format) => {

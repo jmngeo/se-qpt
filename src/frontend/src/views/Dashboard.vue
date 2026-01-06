@@ -131,7 +131,7 @@
               <div class="workflow-description">
                 <el-alert
                   title="Employee Journey"
-                  description="View your organization's SE training preparation (Phase 1), then complete your personal competency assessments (Phases 2-4)."
+                  description="View your organization's SE training preparation (Phase 1), then complete your personal competency self-assessment (Phase 2)."
                   type="success"
                   :closable="false"
                   show-icon
@@ -181,7 +181,7 @@
           <!-- Quick Stats -->
           <el-card class="section-card">
             <template #header>
-              <h3>Competency Overview</h3>
+              <h3>Your Competency Overview</h3>
             </template>
 
             <div class="competency-overview">
@@ -310,6 +310,7 @@ const employeePhases = computed(() => {
   // Force re-computation when phase data is loaded
   if (!phaseDataLoaded.value) return []
 
+  // Employees only see Phases 1 and 2 (Phases 3-4 are admin-only)
   return [
     {
       title: 'Organization SE Training Preparation',
@@ -321,31 +322,13 @@ const employeePhases = computed(() => {
       disabled: false
     },
     {
-      title: getPhaseTitle(2),
-      description: getPhaseDescription(2),
+      title: 'Competency Self-Assessment',
+      description: 'Complete your personal competency assessment and view your results',
       completed: getPhaseStatus(2) === 'completed',
       active: getPhaseStatus(2) === 'available',
       progress: 0,
       route: '/app/phases/2',
       disabled: !canAccessPhase(2)
-    },
-    {
-      title: getPhaseTitle(3),
-      description: getPhaseDescription(3),
-      completed: getPhaseStatus(3) === 'completed',
-      active: getPhaseStatus(3) === 'available',
-      progress: undefined,
-      route: '/app/phases/3',
-      disabled: !canAccessPhase(3)
-    },
-    {
-      title: getPhaseTitle(4),
-      description: getPhaseDescription(4),
-      completed: getPhaseStatus(4) === 'completed',
-      active: getPhaseStatus(4) === 'available',
-      progress: undefined,
-      route: '/app/phases/4',
-      disabled: !canAccessPhase(4)
     }
   ]
 })

@@ -1,9 +1,21 @@
 <template>
   <div class="phase2-task-flow">
-    <!-- Phase 2 Header -->
-    <div class="phase2-header">
-      <h1>Phase 2: {{ headerTitle }}</h1>
-      <p>{{ headerDescription }}</p>
+    <!-- Phase 2 Header Banner -->
+    <div class="phase-header">
+      <div class="phase-indicator">
+        <div class="phase-number">2</div>
+        <div class="phase-title">
+          <h1>Phase 2: {{ headerTitle }}</h1>
+          <p>{{ headerDescription }}</p>
+        </div>
+      </div>
+      <div class="phase-progress">
+        <el-progress
+          :percentage="progressPercentage"
+          :stroke-width="10"
+        />
+        <span class="progress-text">Step {{ currentStepIndex + 1 }} of {{ stepTitles.length }}</span>
+      </div>
     </div>
 
     <!-- Step Indicator (Dynamic based on pathway and user role) -->
@@ -185,6 +197,13 @@ const stepTitles = computed(() => {
   return baseSteps
 })
 
+// Progress percentage for header
+const progressPercentage = computed(() => {
+  const totalSteps = stepTitles.value.length
+  if (totalSteps === 0) return 0
+  return Math.round(((currentStepIndex.value + 1) / totalSteps) * 100)
+})
+
 /**
  * Handle roles selected from Task 1 Step 1
  */
@@ -307,26 +326,82 @@ const handleTasksAnalyzed = async (data) => {
 
 <style scoped>
 .phase2-task-flow {
-  max-width: 1400px;
-  margin: 0 auto;
+  min-height: calc(100vh - 120px);
   padding: 24px;
+  background: #f5f7fa;
 }
 
-.phase2-header {
+.phase2-task-flow > * {
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Phase Header - Matching Phase 1/3 design */
+.phase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 32px;
-  text-align: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #9FA8DA 0%, #7986CB 100%);
+  border-radius: 12px;
+  color: white;
+  box-shadow: 0 4px 12px rgba(121, 134, 203, 0.3);
 }
 
-.phase2-header h1 {
+.phase-indicator {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.phase-number {
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: white;
+}
+
+.phase-title h1 {
   margin: 0 0 8px 0;
-  font-size: 28px;
-  color: #303133;
+  font-size: 2rem;
+  font-weight: 600;
+  color: white;
 }
 
-.phase2-header p {
+.phase-title p {
   margin: 0;
-  font-size: 16px;
-  color: #606266;
+  opacity: 0.9;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.phase-progress {
+  text-align: right;
+  min-width: 200px;
+}
+
+.phase-progress :deep(.el-progress__text) {
+  color: white;
+}
+
+.phase-progress :deep(.el-progress-bar__outer) {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.progress-text {
+  display: block;
+  margin-top: 8px;
+  font-weight: 500;
+  color: white;
 }
 
 .step-indicator {
@@ -343,12 +418,25 @@ const handleTasksAnalyzed = async (data) => {
     padding: 16px;
   }
 
-  .phase2-header h1 {
-    font-size: 22px;
+  .phase-header {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
   }
 
-  .phase2-header p {
-    font-size: 14px;
+  .phase-indicator {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .phase-title h1 {
+    font-size: 1.5rem;
+  }
+
+  .phase-progress {
+    width: 100%;
+    text-align: center;
   }
 }
 </style>
