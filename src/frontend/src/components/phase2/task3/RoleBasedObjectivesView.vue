@@ -59,7 +59,10 @@
 
           <!-- Role Card Content (Expandable) -->
           <div v-show="expandedRole === role.roleId" class="role-card-content">
-            <!-- Training Method Recommendation -->
+            <!-- TODO: DELETE THIS SECTION - "Recommended Training Approach" is no longer needed.
+                 This feature was part of earlier design but is now superseded by Phase 3 Learning Format Selection.
+                 Marked for deletion on 2026-01-18. Remove this entire block and related CSS/JS once confirmed. -->
+            <!-- HIDDEN: Training Method Recommendation
             <div v-if="role.trainingRecommendation" class="training-recommendation">
               <div class="recommendation-header">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -77,6 +80,7 @@
                 </span>
               </div>
             </div>
+            END HIDDEN -->
 
             <!-- Competencies List -->
             <div v-if="getUniqueCompetencies(role.competencies).length > 0" class="competencies-section">

@@ -1026,12 +1026,13 @@ class OrganizationExistingTraining(db.Model):
     These competencies are excluded from LO generation/training requirements.
 
     Feature: "Check and Integrate Existing Offers" (Ulf's request - 11.12.2025)
+    Updated: 2-step level differentiation (Ulf's request - 13.01.2026)
 
     Purpose:
     - Allow users to mark competencies that already have training in their organization
     - Excluded competencies move from "Training Requirements Identified" to "No Training Required"
     - Shows "Training Exists" tag instead of generating new LOs for these
-    - Affects all levels (1, 2, 4) of the selected competency
+    - Now supports level-specific exclusion (not all levels need to be excluded)
 
     Table: organization_existing_trainings
     """
@@ -1041,6 +1042,11 @@ class OrganizationExistingTraining(db.Model):
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='CASCADE'),
                                 nullable=False, index=True)
     competency_id = db.Column(db.Integer, db.ForeignKey('competency.id'), nullable=False)
+
+    # Level differentiation (added 13.01.2026)
+    # JSON array of levels covered, e.g., "[1, 2]" for Knowing & Understanding
+    # Default "[1, 2, 4]" means all levels are covered (backward compatible)
+    covered_levels = db.Column(db.Text, default='[1, 2, 4]')
 
     # Metadata
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1059,12 +1065,21 @@ class OrganizationExistingTraining(db.Model):
                            name='unique_org_competency_training'),
     )
 
+    def get_covered_levels(self):
+        """Parse covered_levels JSON string to list of integers"""
+        import json
+        try:
+            return json.loads(self.covered_levels or '[1, 2, 4]')
+        except (json.JSONDecodeError, TypeError):
+            return [1, 2, 4]
+
     def to_dict(self):
         return {
             'id': self.id,
             'organization_id': self.organization_id,
             'competency_id': self.competency_id,
             'competency_name': self.competency.competency_name if self.competency else None,
+            'covered_levels': self.get_covered_levels(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'notes': self.notes
         }

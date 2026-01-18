@@ -21,11 +21,23 @@ from flask import current_app
 class Phase3PlanningService:
     """Service for Phase 3 Macro Planning operations"""
 
+    # Level name mapping for display
+    LEVEL_NAMES = {
+        1: 'Knowing',
+        2: 'Understanding',
+        4: 'Applying',
+        6: 'Mastering'
+    }
+
     def __init__(self, db_session):
         """Initialize the service with database session"""
         self.db = db_session
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         self.model = "gpt-4o-mini"
+
+    def _get_level_name(self, level: int) -> str:
+        """Convert level number to display name"""
+        return self.LEVEL_NAMES.get(level, f'Level {level}')
 
     # =========================================================================
     # TASK 1: Training Structure Selection
@@ -483,7 +495,7 @@ class Phase3PlanningService:
                             'competency_name': competency_name,
                             'target_level': target_level,
                             'pmt_type': pmt_type,
-                            'module_name': f"{competency_name} - Level {target_level} - {pmt_type.title()}",
+                            'module_name': f"{competency_name} - {self._get_level_name(target_level)} - {pmt_type.title()}",
                             'users_with_gap': users_with_gap,
                             'estimated_participants': estimated_participants,
                             'roles_needing_training': roles_needing,
@@ -501,7 +513,7 @@ class Phase3PlanningService:
                         'competency_name': competency_name,
                         'target_level': target_level,
                         'pmt_type': 'combined',
-                        'module_name': f"{competency_name} - Level {target_level}",
+                        'module_name': f"{competency_name} - {self._get_level_name(target_level)}",
                         'users_with_gap': users_with_gap,
                         'estimated_participants': estimated_participants,
                         'roles_needing_training': roles_needing,
@@ -523,6 +535,10 @@ class Phase3PlanningService:
         """
         Extract training modules from learning objectives, creating separate modules per cluster.
         For Role-Clustered view - each cluster gets its own training module.
+
+        For Engineers cluster (id=1): Implements hybrid approach
+        - "common" subcluster: Modules ALL engineering roles need at same level
+        - "pathway" subcluster: Modules only SOME engineering roles need
         """
         modules = []
 
@@ -536,6 +552,13 @@ class Phase3PlanningService:
 
         # Get clusters info
         clusters_info = self._get_clusters_info(organization_id)
+
+        # ENGINEERS_CLUSTER_ID = 1 (SE for Engineers)
+        ENGINEERS_CLUSTER_ID = 1
+
+        # Get all roles per cluster for subcluster determination
+        all_roles_by_cluster = self._get_all_roles_by_cluster(organization_id)
+        all_engineering_roles = set(all_roles_by_cluster.get(ENGINEERS_CLUSTER_ID, []))
 
         for level_key, level_data in levels.items():
             target_level = int(level_key)
@@ -598,50 +621,105 @@ class Phase3PlanningService:
                     cluster_name = cluster_info.get('training_program_name', f'Cluster {cluster_id}')
 
                     roles_needing = [r['role_name'] for r in roles_list]
+                    roles_needing_set = set(roles_needing)
                     users_with_gap = sum(r['users_needing'] for r in roles_list)
                     estimated_participants = int(users_with_gap * scaling_info['scaling_factor'])
+
+                    # Determine subcluster type for Engineers cluster
+                    # NEW LOGIC: Common Base = 2+ roles share this module
+                    #            Pathway = only 1 role needs this module
+                    subcluster = None
+                    pathway_roles = None
+                    shared_roles_count = len(roles_needing_set)
+
+                    if cluster_id == ENGINEERS_CLUSTER_ID and len(all_engineering_roles) > 0:
+                        if shared_roles_count >= 2:
+                            # 2+ engineering roles need this module - COMMON BASE
+                            # These roles can train together
+                            subcluster = 'common'
+                        else:
+                            # Only 1 role needs this - ROLE-SPECIFIC PATHWAY
+                            subcluster = 'pathway'
+                            pathway_roles = roles_needing
 
                     if has_pmt:
                         for pmt_type in ['method', 'tool']:
                             key = f"{competency_id}_{target_level}_{pmt_type}_{cluster_id}"
                             selection = existing_selections.get(key, {})
 
-                            modules.append({
+                            module_data = {
                                 'competency_id': competency_id,
                                 'competency_name': competency_name,
                                 'target_level': target_level,
                                 'pmt_type': pmt_type,
                                 'cluster_id': cluster_id,
                                 'cluster_name': cluster_name,
-                                'module_name': f"{competency_name} - Level {target_level} - {pmt_type.title()}",
+                                'module_name': f"{competency_name} - {self._get_level_name(target_level)} - {pmt_type.title()}",
                                 'users_with_gap': users_with_gap,
                                 'estimated_participants': estimated_participants,
                                 'roles_needing_training': roles_needing,
                                 'selected_format_id': selection.get('selected_format_id'),
                                 'confirmed': selection.get('confirmed', False),
                                 'suitability': selection.get('suitability')
-                            })
+                            }
+                            # Add subcluster info for Engineers
+                            if subcluster:
+                                module_data['subcluster'] = subcluster
+                                module_data['shared_roles_count'] = shared_roles_count
+                                if pathway_roles:
+                                    module_data['pathway_roles'] = pathway_roles
+
+                            modules.append(module_data)
                     else:
                         key = f"{competency_id}_{target_level}_combined_{cluster_id}"
                         selection = existing_selections.get(key, {})
 
-                        modules.append({
+                        module_data = {
                             'competency_id': competency_id,
                             'competency_name': competency_name,
                             'target_level': target_level,
                             'pmt_type': 'combined',
                             'cluster_id': cluster_id,
                             'cluster_name': cluster_name,
-                            'module_name': f"{competency_name} - Level {target_level}",
+                            'module_name': f"{competency_name} - {self._get_level_name(target_level)}",
                             'users_with_gap': users_with_gap,
                             'estimated_participants': estimated_participants,
                             'roles_needing_training': roles_needing,
                             'selected_format_id': selection.get('selected_format_id'),
                             'confirmed': selection.get('confirmed', False),
                             'suitability': selection.get('suitability')
-                        })
+                        }
+                        # Add subcluster info for Engineers
+                        if subcluster:
+                            module_data['subcluster'] = subcluster
+                            module_data['shared_roles_count'] = shared_roles_count
+                            if pathway_roles:
+                                module_data['pathway_roles'] = pathway_roles
+
+                        modules.append(module_data)
 
         return modules
+
+    def _get_all_roles_by_cluster(self, organization_id: int) -> Dict[int, List[str]]:
+        """Get all role names grouped by their training program cluster."""
+        result = self.db.execute(
+            text("""
+                SELECT training_program_cluster_id, role_name
+                FROM organization_roles
+                WHERE organization_id = :org_id
+                  AND training_program_cluster_id IS NOT NULL
+            """),
+            {'org_id': organization_id}
+        )
+
+        roles_by_cluster = {}
+        for row in result:
+            cluster_id = row.training_program_cluster_id
+            if cluster_id not in roles_by_cluster:
+                roles_by_cluster[cluster_id] = []
+            roles_by_cluster[cluster_id].append(row.role_name)
+
+        return roles_by_cluster
 
     def _get_competency_lookup(self) -> Dict[int, str]:
         """Get competency ID to name mapping"""

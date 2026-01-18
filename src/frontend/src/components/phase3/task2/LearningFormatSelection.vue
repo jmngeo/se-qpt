@@ -7,53 +7,6 @@
     </div>
 
     <template v-else>
-      <!-- Scaling Info Banner -->
-      <el-alert
-        v-if="scalingInfo"
-        type="info"
-        :closable="false"
-        class="scaling-banner"
-      >
-        <template #title>
-          <span class="banner-title">
-            <el-icon><InfoFilled /></el-icon>
-            Participant Estimation
-          </span>
-        </template>
-        <template #default>
-          <div class="scaling-content">
-            <p>
-              Participant counts are <strong>scaled estimates</strong> based on assessment data:
-            </p>
-            <div class="scaling-details">
-              <div class="scaling-item">
-                <span class="scaling-label">Assessed Users:</span>
-                <span class="scaling-value">{{ scalingInfo.actual_assessed_users }}</span>
-              </div>
-              <div class="scaling-item">
-                <span class="scaling-label">Target Group Size:</span>
-                <span class="scaling-value">{{ scalingInfo.target_group_size }}</span>
-              </div>
-              <div class="scaling-item highlight">
-                <span class="scaling-label">Scaling Factor:</span>
-                <span class="scaling-value">{{ scalingInfo.scaling_factor?.toFixed(1) }}x</span>
-              </div>
-            </div>
-          </div>
-        </template>
-      </el-alert>
-
-      <!-- View Type Indicator -->
-      <div class="view-indicator">
-        <el-tag :type="selectedView === 'role_clustered' ? 'success' : 'primary'" effect="plain" size="large">
-          <el-icon><component :is="selectedView === 'role_clustered' ? 'UserFilled' : 'Grid'" /></el-icon>
-          {{ selectedView === 'role_clustered' ? 'Role-Clustered View' : 'Competency-Level View' }}
-        </el-tag>
-        <span v-if="strategyName" class="strategy-badge">
-          Strategy: {{ strategyName }}
-        </span>
-      </div>
-
       <!-- No Modules Message -->
       <div v-if="modules.length === 0" class="no-modules">
         <el-empty description="No training modules available">
@@ -66,34 +19,76 @@
 
       <!-- Modules List -->
       <div v-else class="modules-container">
-        <!-- Progress Summary -->
-        <div class="progress-summary">
-          <div class="summary-stat">
-            <span class="stat-value">{{ competencyGroups.length }}</span>
-            <span class="stat-label">Competencies</span>
+        <!-- Info Section -->
+        <div class="info-section">
+          <!-- Scaled Participant Estimation Info Box -->
+          <div v-if="scalingInfo" class="info-box scaling-info-box">
+            <div class="info-box-header">
+              <el-icon><TrendCharts /></el-icon>
+              <h4>Scaled Participant Estimation</h4>
+            </div>
+            <ul class="info-points">
+              <li>
+                Only <strong>{{ scalingInfo.actual_assessed_users }} employees</strong> completed the assessment,
+                but the target group has <strong>{{ scalingInfo.target_group_size }} employees</strong>.
+              </li>
+              <li>
+                Participant counts are scaled by <strong>{{ scalingInfo.scaling_factor?.toFixed(1) }}x</strong>
+                to estimate training needs for the full group.
+              </li>
+              <li class="note">
+                Estimates may vary based on individual competency gaps across the full target group.
+              </li>
+            </ul>
           </div>
-          <div class="summary-stat">
-            <span class="stat-value">{{ modules.length }}</span>
-            <span class="stat-label">Modules</span>
-          </div>
-          <div class="summary-stat">
-            <span class="stat-value">{{ confirmedCount }}</span>
-            <span class="stat-label">Confirmed</span>
-          </div>
-          <div class="summary-stat">
-            <span class="stat-value">{{ uniqueRolesCount }}</span>
-            <span class="stat-label">Roles</span>
+
+          <!-- Training Programs Info Box (only for role-clustered view) -->
+          <div v-if="selectedView === 'role_clustered'" class="info-box programs-info-box">
+            <div class="info-box-header">
+              <el-icon><Suitcase /></el-icon>
+              <h4>Training Programs</h4>
+            </div>
+            <ul class="info-points">
+              <li>
+                <strong>SE for Engineers:</strong> Roles needing Applying/Mastering in <em>Technical</em> or <em>Core SE</em> areas.
+                Includes Common Base + Role-Specific Pathways.
+              </li>
+              <li>
+                <strong>SE for Managers:</strong> Roles needing Applying/Mastering <em>only</em> in <em>Social/Personal</em> or <em>Management</em> areas.
+              </li>
+              <li>
+                <strong>SE for Interfacing Partners:</strong> Roles needing only Knowing/Understanding level competency.
+              </li>
+            </ul>
           </div>
         </div>
 
-        <!-- Level Legend -->
-        <div class="level-legend">
-          <span class="legend-title">Competency Levels:</span>
-          <div class="legend-items">
-            <span class="legend-item"><span class="level-badge">L1</span> Knowing</span>
-            <span class="legend-item"><span class="level-badge">L2</span> Understanding</span>
-            <span class="legend-item"><span class="level-badge">L4</span> Applying</span>
-            <span class="legend-item"><span class="level-badge">L6</span> Mastering</span>
+        <!-- Stats and Legend Bar -->
+        <div class="stats-legend-bar">
+          <div class="progress-stats">
+            <div class="stat-item">
+              <span class="stat-value">{{ competencyGroups.length }}</span>
+              <span class="stat-label">Competencies</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ modules.length }}</span>
+              <span class="stat-label">Modules</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ confirmedCount }}</span>
+              <span class="stat-label">Confirmed</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ uniqueRolesCount }}</span>
+              <span class="stat-label">Roles</span>
+            </div>
+          </div>
+          <div class="level-legend">
+            <span class="legend-label">Levels:</span>
+            <span class="legend-item"><span class="level-badge">Knowing</span></span>
+            <span class="legend-item"><span class="level-badge">Understanding</span></span>
+            <span class="legend-item"><span class="level-badge">Applying</span></span>
+            <span class="legend-item"><span class="level-badge">Mastering</span></span>
           </div>
         </div>
 
@@ -125,7 +120,7 @@
                 </el-tag>
                 <div class="level-badges">
                   <span v-for="level in group.levels" :key="level" class="level-badge">
-                    L{{ level }}
+                    {{ getLevelName(level) }}
                   </span>
                 </div>
               </div>
@@ -190,136 +185,314 @@
           </div>
         </div>
 
-        <!-- Role-Clustered Based View -->
-        <div v-else class="role-clusters-view">
+        <!-- Training Packages View (Role-Clustered) -->
+        <div v-else class="training-packages-view">
           <div
-            v-for="cluster in clustersWithCompetencies"
-            :key="cluster.id"
-            class="cluster-section"
+            v-for="pkg in trainingPackages"
+            :key="pkg.id"
+            class="training-package"
+            :class="getPackageClass(pkg.id)"
           >
-            <!-- Cluster Header -->
-            <div class="cluster-header">
-              <div class="cluster-title">
-                <el-icon :size="24"><UserFilled /></el-icon>
-                <h3>{{ cluster.training_program_name }}</h3>
+            <!-- Package Header -->
+            <div class="package-header" :class="getPackageHeaderClass(pkg.id)">
+              <div class="package-icon">
+                <el-icon :size="32"><Suitcase /></el-icon>
               </div>
-              <div class="cluster-meta">
-                <el-tag size="small" effect="plain">{{ cluster.role_count }} roles</el-tag>
-                <el-tag size="small" type="info" effect="plain">
-                  {{ cluster.competencies.length }} competencies
-                </el-tag>
+              <div class="package-info">
+                <h3>{{ pkg.training_program_name }}</h3>
+                <p class="package-subtitle">{{ getPackageSubtitle(pkg.id) }}</p>
+              </div>
+              <div class="package-stats">
+                <div class="stat">
+                  <span class="stat-value">{{ pkg.moduleCount }}</span>
+                  <span class="stat-label">Modules</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value">{{ pkg.role_count }}</span>
+                  <span class="stat-label">Roles</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value">{{ getPackageConfirmedCount(pkg) }}/{{ pkg.moduleCount }}</span>
+                  <span class="stat-label">Confirmed</span>
+                </div>
               </div>
             </div>
 
-            <!-- Roles list -->
-            <div class="cluster-roles-list">
+            <!-- Roles included in this package -->
+            <div class="package-roles">
+              <span class="roles-label">Roles:</span>
               <el-tag
-                v-for="role in cluster.roles?.slice(0, 5)"
+                v-for="role in pkg.roles?.slice(0, 6)"
                 :key="role"
                 size="small"
                 effect="plain"
-                type="info"
               >{{ role }}</el-tag>
-              <span v-if="cluster.roles?.length > 5" class="more-roles">
-                +{{ cluster.roles.length - 5 }} more
-              </span>
-            </div>
-
-            <!-- Competencies within cluster -->
-            <div class="cluster-competencies">
-              <div
-                v-for="compGroup in cluster.competencies"
-                :key="`${cluster.id}_${compGroup.competency_id}`"
-                class="nested-competency-group"
+              <el-popover
+                v-if="pkg.roles?.length > 6"
+                placement="bottom"
+                :width="300"
+                trigger="click"
               >
-                <div
-                  class="nested-competency-header"
-                  @click="toggleNestedCompetency(`${cluster.id}_${compGroup.competency_id}`)"
-                >
-                  <div class="nested-title">
-                    <el-icon class="expand-icon" :class="{ 'is-expanded': expandedNestedCompetencies.has(`${cluster.id}_${compGroup.competency_id}`) }">
-                      <ArrowRight />
-                    </el-icon>
-                    <span>{{ compGroup.competency_name }}</span>
-                  </div>
-                  <div class="nested-meta">
-                    <span class="level-badges">
-                      <span v-for="level in compGroup.levels" :key="level" class="level-badge">L{{ level }}</span>
-                    </span>
+                <template #reference>
+                  <el-tag size="small" type="info" class="more-roles-tag" style="cursor: pointer;">
+                    +{{ pkg.roles.length - 6 }} more
+                  </el-tag>
+                </template>
+                <div class="roles-popover">
+                  <div class="popover-title">All Roles in Package ({{ pkg.roles.length }})</div>
+                  <div class="popover-roles-list">
                     <el-tag
+                      v-for="role in pkg.roles"
+                      :key="role"
                       size="small"
-                      :type="compGroup.confirmedCount === compGroup.modules.length ? 'success' : 'info'"
-                    >
-                      {{ compGroup.confirmedCount }}/{{ compGroup.modules.length }}
-                    </el-tag>
+                      effect="plain"
+                    >{{ role }}</el-tag>
                   </div>
                 </div>
+              </el-popover>
+            </div>
 
-                <el-collapse-transition>
-                  <div
-                    v-show="expandedNestedCompetencies.has(`${cluster.id}_${compGroup.competency_id}`)"
-                    class="nested-modules"
-                  >
-                    <div
-                      v-for="module in compGroup.modules"
-                      :key="`${cluster.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`"
-                      class="module-item"
-                      :class="{ 'is-confirmed': module.confirmed }"
-                    >
-                      <div class="module-row" @click="toggleModuleExpand(`${cluster.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`)">
-                        <div class="module-info">
-                          <el-icon class="expand-icon" :class="{ 'is-expanded': expandedModules.has(`${cluster.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`) }">
-                            <ArrowRight />
-                          </el-icon>
-                          <span class="module-level">{{ getLevelName(module.target_level) }}</span>
-                          <span v-if="module.pmt_type && module.pmt_type !== 'combined'" class="module-pmt">{{ formatPmtType(module.pmt_type) }}</span>
-                          <span class="module-participants">
-                            <el-icon><User /></el-icon>
-                            {{ module.estimated_participants }} participants
-                          </span>
-                          <span class="module-roles-count">
-                            <el-icon><UserFilled /></el-icon>
-                            {{ (module.roles_needing_training || []).length }} roles
-                          </span>
-                        </div>
-                        <div class="module-format-select" @click.stop>
-                          <div v-if="module.selected_format" class="format-selected" @click="openFormatDialog(module)">
-                            <span class="format-name">{{ module.selected_format.short_name }}</span>
-                            <el-icon><Check /></el-icon>
+            <!-- Engineers Package: Show Common Base + Pathways -->
+            <template v-if="pkg.id === 1 && pkg.hasSubclusters">
+              <!-- Common Base Section -->
+              <div class="subcluster-section common-base">
+                <div class="subcluster-header">
+                  <el-icon><Connection /></el-icon>
+                  <h4>Common Base</h4>
+                  <span class="subcluster-desc">Modules shared by 2+ engineering roles (group training opportunities)</span>
+                </div>
+                <div class="subcluster-modules">
+                  <template v-for="compGroup in pkg.commonCompetencies" :key="`common_${compGroup.competency_id}`">
+                    <div class="compact-module-group">
+                      <div class="compact-competency-name">{{ compGroup.competency_name }}</div>
+                      <div class="compact-modules-row">
+                        <el-popover
+                          v-for="module in compGroup.modules"
+                          :key="`common_${module.competency_id}_${module.target_level}_${module.pmt_type}`"
+                          placement="top"
+                          :width="280"
+                          trigger="hover"
+                        >
+                          <template #reference>
+                            <div
+                              class="compact-module"
+                              :class="{ 'is-confirmed': module.confirmed }"
+                              @click="openFormatDialog(module)"
+                            >
+                              <span class="compact-level">{{ getLevelName(module.target_level) }}</span>
+                              <span v-if="module.pmt_type !== 'combined'" class="compact-pmt">{{ formatPmtType(module.pmt_type) }}</span>
+                              <span class="shared-badge">{{ module.shared_roles_count || (module.roles_needing_training || []).length }} roles</span>
+                              <el-icon v-if="module.confirmed" class="confirmed-icon"><Check /></el-icon>
+                            </div>
+                          </template>
+                          <div class="module-tooltip">
+                            <div class="tooltip-title">Shared by {{ module.shared_roles_count || (module.roles_needing_training || []).length }} roles:</div>
+                            <div class="tooltip-roles">
+                              <el-tag v-for="role in (module.roles_needing_training || [])" :key="role" size="small" effect="plain">
+                                {{ role }}
+                              </el-tag>
+                            </div>
+                            <div class="tooltip-participants">{{ module.estimated_participants }} estimated participants</div>
                           </div>
-                          <el-button v-else size="small" type="primary" plain @click="openFormatDialog(module)">
-                            Select Format
-                          </el-button>
+                        </el-popover>
+                      </div>
+                    </div>
+                  </template>
+                  <div v-if="pkg.commonCompetencies?.length === 0" class="no-common-modules">
+                    No shared modules found - all modules are role-specific
+                  </div>
+                </div>
+              </div>
+
+              <!-- Role-Specific Pathways Section -->
+              <div class="subcluster-section pathways">
+                <div class="subcluster-header">
+                  <el-icon><Aim /></el-icon>
+                  <h4>Role-Specific Pathways</h4>
+                  <span class="subcluster-desc">Specialized modules for specific engineering roles</span>
+                </div>
+                <div class="pathways-content">
+                  <template v-for="compGroup in pkg.pathwayCompetencies" :key="`pathway_${compGroup.competency_id}`">
+                    <div class="pathway-module-group">
+                      <div class="pathway-competency-header" @click="toggleNestedCompetency(`pathway_${pkg.id}_${compGroup.competency_id}`)">
+                        <el-icon class="expand-icon" :class="{ 'is-expanded': expandedNestedCompetencies.has(`pathway_${pkg.id}_${compGroup.competency_id}`) }">
+                          <ArrowRight />
+                        </el-icon>
+                        <span class="pathway-competency-name">{{ compGroup.competency_name }}</span>
+                        <div class="pathway-meta">
+                          <span class="level-badges">
+                            <span v-for="level in compGroup.levels" :key="level" class="level-badge small">{{ getLevelName(level) }}</span>
+                          </span>
+                          <el-tag size="small" :type="compGroup.confirmedCount === compGroup.modules.length ? 'success' : 'info'">
+                            {{ compGroup.confirmedCount }}/{{ compGroup.modules.length }}
+                          </el-tag>
                         </div>
                       </div>
-                      <!-- Expanded module details -->
                       <el-collapse-transition>
-                        <div v-show="expandedModules.has(`${cluster.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`)" class="module-details">
-                          <div class="detail-section">
-                            <h5>Roles Needing Training</h5>
-                            <div class="roles-list">
-                              <el-tag
-                                v-for="role in (module.roles_needing_training || [])"
-                                :key="role"
-                                size="small"
-                                effect="plain"
-                                type="info"
-                              >{{ role }}</el-tag>
-                              <span v-if="!(module.roles_needing_training || []).length" class="no-roles">No specific roles</span>
+                        <div v-show="expandedNestedCompetencies.has(`pathway_${pkg.id}_${compGroup.competency_id}`)" class="pathway-modules">
+                          <div
+                            v-for="module in compGroup.modules"
+                            :key="`pathway_${module.competency_id}_${module.target_level}_${module.pmt_type}`"
+                            class="module-item pathway-module"
+                            :class="{ 'is-confirmed': module.confirmed }"
+                          >
+                            <div class="module-row">
+                              <div class="module-info">
+                                <span class="module-level">{{ getLevelName(module.target_level) }}</span>
+                                <span v-if="module.pmt_type !== 'combined'" class="module-pmt">{{ formatPmtType(module.pmt_type) }}</span>
+                                <span class="module-participants">
+                                  <el-icon><User /></el-icon>
+                                  {{ module.estimated_participants }}
+                                </span>
+                                <div class="pathway-roles-indicator">
+                                  <el-tag v-for="role in (module.pathway_roles || module.roles_needing_training || []).slice(0, 2)" :key="role" size="small" type="warning" effect="plain">
+                                    {{ role }}
+                                  </el-tag>
+                                  <el-popover
+                                    v-if="(module.pathway_roles || module.roles_needing_training || []).length > 2"
+                                    placement="top"
+                                    :width="280"
+                                    trigger="click"
+                                  >
+                                    <template #reference>
+                                      <el-tag size="small" type="info" class="more-roles-tag" style="cursor: pointer;">
+                                        +{{ (module.pathway_roles || module.roles_needing_training || []).length - 2 }}
+                                      </el-tag>
+                                    </template>
+                                    <div class="roles-popover">
+                                      <div class="popover-title">Roles Needing This Module</div>
+                                      <div class="popover-roles-list">
+                                        <el-tag
+                                          v-for="role in (module.pathway_roles || module.roles_needing_training || [])"
+                                          :key="role"
+                                          size="small"
+                                          effect="plain"
+                                          type="warning"
+                                        >{{ role }}</el-tag>
+                                      </div>
+                                    </div>
+                                  </el-popover>
+                                </div>
+                              </div>
+                              <div class="module-format-select" @click.stop>
+                                <div v-if="module.selected_format" class="format-selected" @click="openFormatDialog(module)">
+                                  <span class="format-name">{{ module.selected_format.short_name }}</span>
+                                  <el-icon><Check /></el-icon>
+                                </div>
+                                <el-button v-else size="small" type="primary" plain @click="openFormatDialog(module)">
+                                  Select
+                                </el-button>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </el-collapse-transition>
                     </div>
+                  </template>
+                  <div v-if="pkg.pathwayCompetencies?.length === 0" class="no-pathway-modules">
+                    No role-specific modules - all modules are common
                   </div>
-                </el-collapse-transition>
+                </div>
               </div>
-            </div>
+            </template>
+
+            <!-- Non-Engineers Packages: Standard competency list -->
+            <template v-else>
+              <div class="package-competencies">
+                <div
+                  v-for="compGroup in pkg.competencies"
+                  :key="`${pkg.id}_${compGroup.competency_id}`"
+                  class="nested-competency-group"
+                >
+                  <div
+                    class="nested-competency-header"
+                    @click="toggleNestedCompetency(`${pkg.id}_${compGroup.competency_id}`)"
+                  >
+                    <div class="nested-title">
+                      <el-icon class="expand-icon" :class="{ 'is-expanded': expandedNestedCompetencies.has(`${pkg.id}_${compGroup.competency_id}`) }">
+                        <ArrowRight />
+                      </el-icon>
+                      <span>{{ compGroup.competency_name }}</span>
+                    </div>
+                    <div class="nested-meta">
+                      <span class="level-badges">
+                        <span v-for="level in compGroup.levels" :key="level" class="level-badge">{{ getLevelName(level) }}</span>
+                      </span>
+                      <el-tag
+                        size="small"
+                        :type="compGroup.confirmedCount === compGroup.modules.length ? 'success' : 'info'"
+                      >
+                        {{ compGroup.confirmedCount }}/{{ compGroup.modules.length }}
+                      </el-tag>
+                    </div>
+                  </div>
+
+                  <el-collapse-transition>
+                    <div
+                      v-show="expandedNestedCompetencies.has(`${pkg.id}_${compGroup.competency_id}`)"
+                      class="nested-modules"
+                    >
+                      <div
+                        v-for="module in compGroup.modules"
+                        :key="`${pkg.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`"
+                        class="module-item"
+                        :class="{ 'is-confirmed': module.confirmed }"
+                      >
+                        <div class="module-row" @click="toggleModuleExpand(`${pkg.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`)">
+                          <div class="module-info">
+                            <el-icon class="expand-icon" :class="{ 'is-expanded': expandedModules.has(`${pkg.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`) }">
+                              <ArrowRight />
+                            </el-icon>
+                            <span class="module-level">{{ getLevelName(module.target_level) }}</span>
+                            <span v-if="module.pmt_type && module.pmt_type !== 'combined'" class="module-pmt">{{ formatPmtType(module.pmt_type) }}</span>
+                            <span class="module-participants">
+                              <el-icon><User /></el-icon>
+                              {{ module.estimated_participants }} participants
+                            </span>
+                            <span class="module-roles-count">
+                              <el-icon><UserFilled /></el-icon>
+                              {{ (module.roles_needing_training || []).length }} roles
+                            </span>
+                          </div>
+                          <div class="module-format-select" @click.stop>
+                            <div v-if="module.selected_format" class="format-selected" @click="openFormatDialog(module)">
+                              <span class="format-name">{{ module.selected_format.short_name }}</span>
+                              <el-icon><Check /></el-icon>
+                            </div>
+                            <el-button v-else size="small" type="primary" plain @click="openFormatDialog(module)">
+                              Select Format
+                            </el-button>
+                          </div>
+                        </div>
+                        <!-- Expanded module details -->
+                        <el-collapse-transition>
+                          <div v-show="expandedModules.has(`${pkg.id}_${module.competency_id}_${module.target_level}_${module.pmt_type}`)" class="module-details">
+                            <div class="detail-section">
+                              <h5>Roles Needing Training</h5>
+                              <div class="roles-list">
+                                <el-tag
+                                  v-for="role in (module.roles_needing_training || [])"
+                                  :key="role"
+                                  size="small"
+                                  effect="plain"
+                                  type="info"
+                                >{{ role }}</el-tag>
+                                <span v-if="!(module.roles_needing_training || []).length" class="no-roles">No specific roles</span>
+                              </div>
+                            </div>
+                          </div>
+                        </el-collapse-transition>
+                      </div>
+                    </div>
+                  </el-collapse-transition>
+                </div>
+              </div>
+            </template>
           </div>
 
-          <!-- Empty clusters message -->
-          <div v-if="clustersWithCompetencies.length === 0" class="no-clusters">
-            <el-empty description="No role clusters with training modules found" />
+          <!-- Empty packages message -->
+          <div v-if="trainingPackages.length === 0" class="no-clusters">
+            <el-empty description="No training packages with modules found" />
           </div>
         </div>
 
@@ -359,7 +532,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Loading, InfoFilled, ArrowLeft, ArrowRight, Grid, UserFilled, User, Check
+  Loading, InfoFilled, ArrowLeft, ArrowRight, Grid, UserFilled, User, Check,
+  Suitcase, Connection, Aim, TrendCharts, Right, Warning
 } from '@element-plus/icons-vue'
 import axios from '@/api/axios'
 import FormatSelectorDialog from './FormatSelectorDialog.vue'
@@ -447,9 +621,9 @@ const competencyGroups = computed(() => {
     .sort((a, b) => a.competency_id - b.competency_id)
 })
 
-// Group by cluster -> competency for Role-Clustered view
-// Backend now returns cluster-specific modules with cluster_id, so we group by that
-const clustersWithCompetencies = computed(() => {
+// Group by cluster -> competency for Role-Clustered view (Training Packages)
+// Backend now returns cluster-specific modules with cluster_id and subcluster info
+const trainingPackages = computed(() => {
   if (props.selectedView !== 'role_clustered') {
     return []
   }
@@ -467,13 +641,25 @@ const clustersWithCompetencies = computed(() => {
         cluster_name: module.cluster_name,
         training_program_name: module.cluster_name,
         modules: [],
-        competencyMap: {}
+        competencyMap: {},
+        // For Engineers: separate common vs pathway modules
+        commonModules: [],
+        pathwayModules: []
       }
     }
 
     clusterGroups[clusterId].modules.push(module)
 
-    // Group by competency within cluster
+    // For Engineers cluster (id=1), separate by subcluster
+    if (clusterId === 1 && module.subcluster) {
+      if (module.subcluster === 'common') {
+        clusterGroups[clusterId].commonModules.push(module)
+      } else if (module.subcluster === 'pathway') {
+        clusterGroups[clusterId].pathwayModules.push(module)
+      }
+    }
+
+    // Group by competency within cluster (for standard view)
     const compId = module.competency_id
     if (!clusterGroups[clusterId].competencyMap[compId]) {
       clusterGroups[clusterId].competencyMap[compId] = {
@@ -505,6 +691,66 @@ const clustersWithCompetencies = computed(() => {
       // Find matching roleCluster to get roles info
       const matchingRoleCluster = roleClusters.value.find(rc => rc.id === cluster.id)
 
+      // For Engineers: Create competency groups for common and pathway modules
+      const hasSubclusters = cluster.id === 1 && (cluster.commonModules.length > 0 || cluster.pathwayModules.length > 0)
+
+      let commonCompetencies = []
+      let pathwayCompetencies = []
+
+      if (hasSubclusters) {
+        // Group common modules by competency
+        const commonByComp = {}
+        cluster.commonModules.forEach(m => {
+          if (!commonByComp[m.competency_id]) {
+            commonByComp[m.competency_id] = {
+              competency_id: m.competency_id,
+              competency_name: m.competency_name,
+              modules: [],
+              levels: new Set()
+            }
+          }
+          commonByComp[m.competency_id].modules.push(m)
+          commonByComp[m.competency_id].levels.add(m.target_level)
+        })
+        commonCompetencies = Object.values(commonByComp)
+          .map(g => ({
+            ...g,
+            levels: Array.from(g.levels).sort((a, b) => a - b),
+            confirmedCount: g.modules.filter(m => m.confirmed).length,
+            modules: g.modules.sort((a, b) => {
+              if (a.target_level !== b.target_level) return a.target_level - b.target_level
+              return (a.pmt_type || '').localeCompare(b.pmt_type || '')
+            })
+          }))
+          .sort((a, b) => a.competency_id - b.competency_id)
+
+        // Group pathway modules by competency
+        const pathwayByComp = {}
+        cluster.pathwayModules.forEach(m => {
+          if (!pathwayByComp[m.competency_id]) {
+            pathwayByComp[m.competency_id] = {
+              competency_id: m.competency_id,
+              competency_name: m.competency_name,
+              modules: [],
+              levels: new Set()
+            }
+          }
+          pathwayByComp[m.competency_id].modules.push(m)
+          pathwayByComp[m.competency_id].levels.add(m.target_level)
+        })
+        pathwayCompetencies = Object.values(pathwayByComp)
+          .map(g => ({
+            ...g,
+            levels: Array.from(g.levels).sort((a, b) => a - b),
+            confirmedCount: g.modules.filter(m => m.confirmed).length,
+            modules: g.modules.sort((a, b) => {
+              if (a.target_level !== b.target_level) return a.target_level - b.target_level
+              return (a.pmt_type || '').localeCompare(b.pmt_type || '')
+            })
+          }))
+          .sort((a, b) => a.competency_id - b.competency_id)
+      }
+
       return {
         id: cluster.id,
         cluster_name: cluster.cluster_name,
@@ -512,12 +758,21 @@ const clustersWithCompetencies = computed(() => {
         competencies,
         moduleCount: cluster.modules.length,
         role_count: matchingRoleCluster?.role_count || 0,
-        roles: matchingRoleCluster?.roles || []
+        roles: matchingRoleCluster?.roles || [],
+        // Engineers subcluster data
+        hasSubclusters,
+        commonCompetencies,
+        pathwayCompetencies,
+        commonModuleCount: cluster.commonModules.length,
+        pathwayModuleCount: cluster.pathwayModules.length
       }
     })
     .filter(cluster => cluster.competencies.length > 0)
     .sort((a, b) => a.id - b.id)
 })
+
+// Keep old name as alias for backward compatibility
+const clustersWithCompetencies = trainingPackages
 
 // Methods
 const formatPmtType = (pmt) => {
@@ -563,6 +818,38 @@ const getClusterRoles = (module, clusterId) => {
 const openFormatDialog = (module) => {
   selectedModule.value = module
   showFormatDialog.value = true
+}
+
+// Training Package helper methods
+const getPackageClass = (pkgId) => {
+  switch (pkgId) {
+    case 1: return 'package-engineers'
+    case 2: return 'package-managers'
+    case 3: return 'package-partners'
+    default: return ''
+  }
+}
+
+const getPackageHeaderClass = (pkgId) => {
+  switch (pkgId) {
+    case 1: return 'header-engineers'
+    case 2: return 'header-managers'
+    case 3: return 'header-partners'
+    default: return ''
+  }
+}
+
+const getPackageSubtitle = (pkgId) => {
+  switch (pkgId) {
+    case 1: return 'Technical & Core competencies at Applying/Mastering levels'
+    case 2: return 'Management & Social competencies focus'
+    case 3: return 'Basic awareness (Knowing/Understanding) modules'
+    default: return ''
+  }
+}
+
+const getPackageConfirmedCount = (pkg) => {
+  return pkg.competencies.reduce((sum, comp) => sum + comp.confirmedCount, 0)
 }
 
 const loadData = async () => {
@@ -679,136 +966,131 @@ onMounted(() => {
   color: #909399;
 }
 
-/* Scaling Banner */
-.scaling-banner {
-  margin-bottom: 20px;
+/* Info Section */
+.info-section {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.banner-title {
+.info-box {
+  flex: 1;
+  background: #F8F9FA;
+  border: 1px solid #E4E7ED;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.info-box-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
+  margin-bottom: 8px;
 }
 
-.scaling-content p {
-  margin: 0 0 12px 0;
+.info-box-header .el-icon {
+  font-size: 16px;
 }
 
-.scaling-details {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
+.scaling-info-box .info-box-header .el-icon {
+  color: #409EFF;
 }
 
-.scaling-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.programs-info-box .info-box-header .el-icon {
+  color: #67C23A;
 }
 
-.scaling-label {
+.info-box-header h4 {
+  margin: 0;
   font-size: 13px;
-  color: #606266;
-}
-
-.scaling-value {
   font-weight: 600;
   color: #303133;
 }
 
-.scaling-item.highlight .scaling-value {
-  color: #409EFF;
-  font-size: 16px;
+.info-points {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.6;
 }
 
-/* View Indicator */
-.view-indicator {
+.info-points li {
+  margin-bottom: 4px;
+}
+
+.info-points li:last-child {
+  margin-bottom: 0;
+}
+
+.info-points li strong {
+  color: #303133;
+}
+
+.info-points li em {
+  font-style: normal;
+  color: #909399;
+}
+
+.info-points li.note {
+  color: #909399;
+  font-style: italic;
+}
+
+/* Stats and Legend Bar */
+.stats-legend-bar {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
   padding: 12px 16px;
   background: #F5F7FA;
+  border: 1px solid #E4E7ED;
   border-radius: 8px;
+  margin-bottom: 16px;
 }
 
-.view-indicator .el-tag {
-  display: inline-flex;
-  align-items: center;
+.progress-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: baseline;
   gap: 6px;
 }
 
-.strategy-badge {
-  font-size: 13px;
-  color: #E6A23C;
-  font-weight: 500;
-}
-
-/* Progress Summary */
-.progress-summary {
-  display: flex;
-  gap: 24px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, #F5F7FA 0%, #E4E7ED 100%);
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.summary-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.stat-value {
-  font-size: 24px;
+.stat-item .stat-value {
+  font-size: 18px;
   font-weight: 700;
   color: #303133;
 }
 
-.stat-label {
+.stat-item .stat-label {
   font-size: 12px;
   color: #909399;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-/* Level Legend */
 .level-legend {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: #FAFAFA;
-  border: 1px solid #EBEEF5;
-  border-radius: 6px;
-  margin-bottom: 20px;
+  gap: 8px;
 }
 
-.legend-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #606266;
-}
-
-.legend-items {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
+.legend-label {
+  font-size: 12px;
+  color: #909399;
+  margin-right: 4px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #606266;
 }
 
 .legend-item .level-badge {
   font-size: 10px;
-  padding: 2px 6px;
+  padding: 2px 8px;
 }
 
 /* Competency Groups */
@@ -1137,6 +1419,435 @@ onMounted(() => {
 
 .no-modules, .no-clusters {
   padding: 40px 20px;
+}
+
+/* ==========================================
+   Training Packages View (Role-Clustered)
+   ========================================== */
+.training-packages-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.training-package {
+  border: 2px solid #DCDFE6;
+  border-radius: 16px;
+  background: white;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Package Color Variants */
+.package-engineers {
+  border-color: #409EFF;
+}
+
+.package-managers {
+  border-color: #E6A23C;
+}
+
+.package-partners {
+  border-color: #67C23A;
+}
+
+/* Package Header */
+.package-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #F5F7FA 0%, #EBEEF5 100%);
+}
+
+.header-engineers {
+  background: linear-gradient(135deg, #ECF5FF 0%, #D9ECFF 100%);
+}
+
+.header-managers {
+  background: linear-gradient(135deg, #FDF6EC 0%, #FAECD8 100%);
+}
+
+.header-partners {
+  background: linear-gradient(135deg, #F0F9EB 0%, #E1F3D8 100%);
+}
+
+.package-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.package-engineers .package-icon {
+  color: #409EFF;
+}
+
+.package-managers .package-icon {
+  color: #E6A23C;
+}
+
+.package-partners .package-icon {
+  color: #67C23A;
+}
+
+.package-info {
+  flex: 1;
+}
+
+.package-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.package-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #909399;
+}
+
+.package-stats {
+  display: flex;
+  gap: 20px;
+}
+
+.package-stats .stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+}
+
+.package-stats .stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #303133;
+}
+
+.package-stats .stat-label {
+  font-size: 11px;
+  color: #909399;
+  text-transform: uppercase;
+}
+
+/* Package Roles */
+.package-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #FAFAFA;
+  border-bottom: 1px solid #EBEEF5;
+}
+
+.roles-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+  margin-right: 4px;
+}
+
+/* Package Competencies (standard view) */
+.package-competencies {
+  padding: 16px;
+}
+
+/* Subcluster Sections (Engineers package) */
+.subcluster-section {
+  margin: 16px;
+  border: 1px solid #EBEEF5;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.subcluster-section.common-base {
+  border-color: #B3D8FF;
+  background: #F5FAFF;
+}
+
+.subcluster-section.pathways {
+  border-color: #FAECD8;
+  background: #FFFDF5;
+}
+
+.subcluster-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: white;
+  border-bottom: 1px solid #EBEEF5;
+}
+
+.common-base .subcluster-header {
+  background: linear-gradient(to right, #ECF5FF 0%, white 100%);
+}
+
+.pathways .subcluster-header {
+  background: linear-gradient(to right, #FDF6EC 0%, white 100%);
+}
+
+.subcluster-header .el-icon {
+  color: #409EFF;
+}
+
+.pathways .subcluster-header .el-icon {
+  color: #E6A23C;
+}
+
+.subcluster-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.subcluster-desc {
+  font-size: 12px;
+  color: #909399;
+  margin-left: auto;
+}
+
+/* Compact Module Display (Common Base) */
+.subcluster-modules {
+  padding: 12px 16px;
+}
+
+.compact-module-group {
+  margin-bottom: 12px;
+}
+
+.compact-module-group:last-child {
+  margin-bottom: 0;
+}
+
+.compact-competency-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.compact-modules-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compact-module {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #DCDFE6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.compact-module:hover {
+  border-color: #409EFF;
+  background: #ECF5FF;
+}
+
+.compact-module.is-confirmed {
+  border-color: #67C23A;
+  background: #F0F9EB;
+}
+
+.compact-level {
+  font-weight: 600;
+  color: #409EFF;
+  font-size: 11px;
+  background: #ECF5FF;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.compact-pmt {
+  font-size: 11px;
+  color: #909399;
+  padding: 1px 6px;
+  background: #F5F7FA;
+  border-radius: 3px;
+}
+
+.compact-participants {
+  font-size: 11px;
+  color: #606266;
+}
+
+.compact-module .confirmed-icon {
+  color: #67C23A;
+  font-size: 14px;
+}
+
+.no-common-modules, .no-pathway-modules {
+  padding: 16px;
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Pathway Module Groups */
+.pathways-content {
+  padding: 8px;
+}
+
+.pathway-module-group {
+  margin-bottom: 8px;
+  border: 1px solid #EBEEF5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pathway-module-group:last-child {
+  margin-bottom: 0;
+}
+
+.pathway-competency-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #FAFAFA;
+  cursor: pointer;
+}
+
+.pathway-competency-header:hover {
+  background: #F5F7FA;
+}
+
+.pathway-competency-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  flex: 1;
+}
+
+.pathway-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pathway-modules {
+  border-top: 1px solid #EBEEF5;
+  background: white;
+}
+
+.pathway-module {
+  border-bottom: 1px solid #F5F7FA;
+}
+
+.pathway-module:last-child {
+  border-bottom: none;
+}
+
+.pathway-roles-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.level-badge.small {
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
+/* Roles Popover Styles */
+.more-roles-tag {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.more-roles-tag:hover {
+  background-color: #409EFF;
+  color: white;
+  border-color: #409EFF;
+}
+
+.roles-popover {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.popover-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #EBEEF5;
+}
+
+.popover-roles-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.popover-roles-list .el-tag {
+  margin: 0;
+}
+
+/* Shared Badge for Common Base modules */
+.shared-badge {
+  font-size: 10px;
+  color: #909399;
+  background: #F5F7FA;
+  padding: 2px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.compact-module.is-confirmed .shared-badge {
+  background: #E1F3D8;
+  color: #67C23A;
+}
+
+/* Module Tooltip (hover info for Common Base modules) */
+.module-tooltip {
+  padding: 4px 0;
+}
+
+.tooltip-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 10px;
+}
+
+.tooltip-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tooltip-roles .el-tag {
+  margin: 0;
+}
+
+.tooltip-participants {
+  font-size: 12px;
+  color: #909399;
+  padding-top: 8px;
+  border-top: 1px solid #EBEEF5;
 }
 
 /* Responsive */

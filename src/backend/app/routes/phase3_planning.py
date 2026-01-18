@@ -664,6 +664,44 @@ def export_phase3_excel(organization_id):
         ws[f'B{row}'] = datetime.now().strftime('%Y-%m-%d %H:%M')
         row += 2
 
+        # ===== SCALED PARTICIPANT ESTIMATION NOTE =====
+        # Get scaling info from training_modules
+        training_modules_data = output.get('training_modules', {})
+        scaling_info = training_modules_data.get('scaling_info', {})
+        if scaling_info and scaling_info.get('scaling_factor') and scaling_info.get('scaling_factor', 1) > 1:
+            NOTE_FILL = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+            NOTE_BORDER = Border(
+                left=Side(style='thin', color='E6A23C'),
+                right=Side(style='thin', color='E6A23C'),
+                top=Side(style='thin', color='E6A23C'),
+                bottom=Side(style='thin', color='E6A23C')
+            )
+
+            ws[f'A{row}'] = 'Note: Scaled Participant Estimation'
+            ws[f'A{row}'].font = Font(bold=True, color='E6A23C')
+            row += 1
+
+            assessed = scaling_info.get('actual_assessed_users', 0)
+            target = scaling_info.get('target_group_size', 0)
+            factor = scaling_info.get('scaling_factor', 1)
+
+            note_lines = [
+                f"Only {assessed} out of {target} employees in the target group completed the competency assessment.",
+                f"Participant counts are scaled by a factor of {factor:.1f}x to estimate organization-wide training needs.",
+                "Actual participation may vary based on individual competency gaps and role assignments.",
+                "These estimates should be used for planning purposes and may require adjustment."
+            ]
+
+            for note_line in note_lines:
+                cell = ws[f'A{row}']
+                cell.value = f"  - {note_line}"
+                cell.fill = NOTE_FILL
+                cell.border = NOTE_BORDER
+                ws.merge_cells(f'A{row}:F{row}')
+                row += 1
+
+            row += 1
+
         # ===== TRAINING MODULES TABLE =====
         ws[f'A{row}'] = 'Training Modules'
         ws[f'A{row}'].font = SUBTITLE_FONT
@@ -689,8 +727,8 @@ def export_phase3_excel(organization_id):
 
         # Table headers
         if is_role_clustered:
-            headers = ['Training Program', 'Training Module', 'Level', 'Learning Format', 'Est. Participants']
-            col_widths = [25, 45, 15, 20, 18]
+            headers = ['Training Program', 'Module Type', 'Training Module', 'Level', 'Learning Format', 'Est. Participants']
+            col_widths = [22, 18, 40, 15, 18, 16]
         else:
             headers = ['Training Module', 'Level', 'Learning Format', 'Est. Participants']
             col_widths = [50, 15, 20, 18]
@@ -708,6 +746,10 @@ def export_phase3_excel(organization_id):
 
         # Group modules by cluster for Role-Clustered view
         if is_role_clustered:
+            # Style for Common Base vs Role-Specific
+            COMMON_BASE_FILL = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+            ROLE_SPECIFIC_FILL = PatternFill(start_color='DEEBF7', end_color='DEEBF7', fill_type='solid')
+
             # Sort modules by cluster - use cluster_id to look up proper name
             cluster_groups = {}
             for module in modules:
@@ -724,52 +766,131 @@ def export_phase3_excel(organization_id):
                     cluster_groups[cluster_display] = []
                 cluster_groups[cluster_display].append(module)
 
+            # Define cluster order (Engineers first, then Managers, then Interfacing Partners)
+            cluster_order = ['SE for Engineers', 'SE for Managers', 'SE for Interfacing Partners']
+            sorted_clusters = []
+            for cluster in cluster_order:
+                if cluster in cluster_groups:
+                    sorted_clusters.append((cluster, cluster_groups[cluster]))
+            # Add any remaining clusters
+            for cluster, mods in cluster_groups.items():
+                if cluster not in cluster_order:
+                    sorted_clusters.append((cluster, mods))
+
             # Write modules grouped by cluster
-            for cluster_display, cluster_modules in sorted(cluster_groups.items()):
+            for cluster_display, cluster_modules in sorted_clusters:
                 cluster_start_row = row
 
-                for module in cluster_modules:
-                    level_num = module.get('target_level', 0)
-                    level_name = LEVEL_NAMES.get(level_num, f'Level {level_num}')
+                # For Engineers, separate into Common Base and Role-Specific
+                # Uses 'subcluster' field: 'common' = Common Base, 'pathway' = Role-Specific
+                if 'Engineer' in cluster_display:
+                    common_base = [m for m in cluster_modules if m.get('subcluster') == 'common']
+                    role_specific = [m for m in cluster_modules if m.get('subcluster') != 'common']
 
-                    # Format module name (Competency + PMT Type)
-                    module_name = format_module_name(
-                        module.get('competency_name', ''),
-                        module.get('pmt_type', '')
-                    )
+                    # Write Common Base modules first
+                    for module in common_base:
+                        level_num = module.get('target_level', 0)
+                        level_name = LEVEL_NAMES.get(level_num, f'Level {level_num}')
+                        module_name = format_module_name(
+                            module.get('competency_name', ''),
+                            module.get('pmt_type', '')
+                        )
+                        format_name = module.get('format_name', '')
+                        if not format_name and module.get('selected_format_id'):
+                            fmt_result = db.session.execute(
+                                db.text("SELECT format_name FROM learning_format WHERE id = :id"),
+                                {'id': module['selected_format_id']}
+                            ).fetchone()
+                            format_name = fmt_result.format_name if fmt_result else 'Not Selected'
+                        elif not format_name:
+                            format_name = 'Not Selected'
 
-                    # Get format name
-                    format_name = module.get('format_name', '')
-                    if not format_name and module.get('selected_format_id'):
-                        fmt_result = db.session.execute(
-                            db.text("SELECT format_name FROM learning_format WHERE id = :id"),
-                            {'id': module['selected_format_id']}
-                        ).fetchone()
-                        format_name = fmt_result.format_name if fmt_result else 'Not Selected'
-                    elif not format_name:
-                        format_name = 'Not Selected'
+                        values = [cluster_display, 'Common Base', module_name, level_name, format_name,
+                                  module.get('estimated_participants', 0)]
+                        for col_idx, value in enumerate(values, 1):
+                            cell = ws.cell(row=row, column=col_idx, value=value)
+                            cell.border = THIN_BORDER
+                            if col_idx == 1:
+                                cell.fill = CLUSTER_FILL
+                                cell.font = CLUSTER_FONT
+                            if col_idx == 2:
+                                cell.fill = COMMON_BASE_FILL
+                            if col_idx in [4, 6]:
+                                cell.alignment = Alignment(horizontal='center')
+                        row += 1
 
-                    values = [
-                        cluster_display,
-                        module_name,
-                        level_name,
-                        format_name,
-                        module.get('estimated_participants', 0)
-                    ]
+                    # Write Role-Specific modules
+                    for module in role_specific:
+                        level_num = module.get('target_level', 0)
+                        level_name = LEVEL_NAMES.get(level_num, f'Level {level_num}')
+                        module_name = format_module_name(
+                            module.get('competency_name', ''),
+                            module.get('pmt_type', '')
+                        )
+                        # Include role info if available (pathway_roles from subcluster logic)
+                        pathway_roles = module.get('pathway_roles') or module.get('roles_needing_training', [])
+                        if pathway_roles and isinstance(pathway_roles, list):
+                            role_info = ', '.join(pathway_roles[:2])  # Limit to first 2 roles
+                            if len(pathway_roles) > 2:
+                                role_info += f' +{len(pathway_roles)-2} more'
+                            module_name = f"{module_name} ({role_info})"
 
-                    for col_idx, value in enumerate(values, 1):
-                        cell = ws.cell(row=row, column=col_idx, value=value)
-                        cell.border = THIN_BORDER
-                        if col_idx == 1:  # Cluster column
-                            cell.fill = CLUSTER_FILL
-                            cell.font = CLUSTER_FONT
-                        if col_idx in [3, 5]:  # Center align level, participants
-                            cell.alignment = Alignment(horizontal='center')
+                        format_name = module.get('format_name', '')
+                        if not format_name and module.get('selected_format_id'):
+                            fmt_result = db.session.execute(
+                                db.text("SELECT format_name FROM learning_format WHERE id = :id"),
+                                {'id': module['selected_format_id']}
+                            ).fetchone()
+                            format_name = fmt_result.format_name if fmt_result else 'Not Selected'
+                        elif not format_name:
+                            format_name = 'Not Selected'
 
-                    row += 1
+                        values = [cluster_display, 'Role-Specific', module_name, level_name, format_name,
+                                  module.get('estimated_participants', 0)]
+                        for col_idx, value in enumerate(values, 1):
+                            cell = ws.cell(row=row, column=col_idx, value=value)
+                            cell.border = THIN_BORDER
+                            if col_idx == 1:
+                                cell.fill = CLUSTER_FILL
+                                cell.font = CLUSTER_FONT
+                            if col_idx == 2:
+                                cell.fill = ROLE_SPECIFIC_FILL
+                            if col_idx in [4, 6]:
+                                cell.alignment = Alignment(horizontal='center')
+                        row += 1
+                else:
+                    # For Managers and Interfacing Partners - no Common Base distinction
+                    for module in cluster_modules:
+                        level_num = module.get('target_level', 0)
+                        level_name = LEVEL_NAMES.get(level_num, f'Level {level_num}')
+                        module_name = format_module_name(
+                            module.get('competency_name', ''),
+                            module.get('pmt_type', '')
+                        )
+                        format_name = module.get('format_name', '')
+                        if not format_name and module.get('selected_format_id'):
+                            fmt_result = db.session.execute(
+                                db.text("SELECT format_name FROM learning_format WHERE id = :id"),
+                                {'id': module['selected_format_id']}
+                            ).fetchone()
+                            format_name = fmt_result.format_name if fmt_result else 'Not Selected'
+                        elif not format_name:
+                            format_name = 'Not Selected'
+
+                        values = [cluster_display, '-', module_name, level_name, format_name,
+                                  module.get('estimated_participants', 0)]
+                        for col_idx, value in enumerate(values, 1):
+                            cell = ws.cell(row=row, column=col_idx, value=value)
+                            cell.border = THIN_BORDER
+                            if col_idx == 1:
+                                cell.fill = CLUSTER_FILL
+                                cell.font = CLUSTER_FONT
+                            if col_idx in [4, 6]:
+                                cell.alignment = Alignment(horizontal='center')
+                        row += 1
 
                 # Merge cluster cells if multiple modules
-                if len(cluster_modules) > 1:
+                if row - cluster_start_row > 1:
                     ws.merge_cells(f'A{cluster_start_row}:A{row - 1}')
                     ws[f'A{cluster_start_row}'].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 

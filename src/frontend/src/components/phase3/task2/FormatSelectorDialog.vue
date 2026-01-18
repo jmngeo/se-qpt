@@ -2,119 +2,168 @@
   <el-dialog
     v-model="dialogVisible"
     title="Select Learning Format"
-    width="900px"
+    width="1100px"
     :close-on-click-modal="false"
     class="format-selector-dialog"
   >
     <template #header>
       <div class="dialog-header">
-        <h3>Select Learning Format</h3>
-        <p class="module-context">
-          <strong>{{ module?.module_name }}</strong>
-          <span class="context-details">
-            | Target: Level {{ module?.target_level }}
-            | Est. {{ module?.estimated_participants }} participants
-          </span>
-        </p>
+        <div class="header-title">
+          <el-icon class="header-icon"><Collection /></el-icon>
+          <h3>Select Learning Format</h3>
+        </div>
+        <div class="module-info-card">
+          <div class="module-name">{{ module?.module_name }}</div>
+          <div class="module-meta">
+            <span class="meta-item">
+              <el-icon><User /></el-icon>
+              {{ module?.estimated_participants }} participants
+            </span>
+          </div>
+        </div>
       </div>
     </template>
 
     <!-- Loading state -->
     <div v-if="loadingFormats" class="loading-state">
-      <el-icon class="is-loading" :size="32"><Loading /></el-icon>
-      <p>Loading formats...</p>
+      <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+      <p>Loading learning formats...</p>
     </div>
 
     <div v-else class="format-selection-content">
       <!-- Format Grid -->
-      <div class="formats-grid">
-        <div
-          v-for="format in formats"
-          :key="format.id"
-          class="format-card"
-          :class="{
-            'selected': selectedFormatId === format.id,
-            'evaluating': evaluatingFormatId === format.id
-          }"
-          @click="selectFormat(format)"
-        >
-          <span class="format-icon">{{ getFormatEmoji(format.format_key) }}</span>
-          <h4 class="format-name">{{ format.short_name }}</h4>
+      <div class="formats-section">
+        <div class="section-label">Choose a format:</div>
+        <div class="formats-grid">
+          <div
+            v-for="format in formats"
+            :key="format.id"
+            class="format-card"
+            :class="{
+              'selected': selectedFormatId === format.id,
+              'evaluating': evaluatingFormatId === format.id,
+              'has-suitability': formatSuitability[format.id]
+            }"
+            @click="selectFormat(format)"
+          >
+            <div class="format-icon-wrapper">
+              <span class="format-icon">{{ getFormatEmoji(format.format_key) }}</span>
+            </div>
+            <h4 class="format-name">{{ format.short_name }}</h4>
 
-          <!-- Quick suitability preview -->
-          <div v-if="formatSuitability[format.id]" class="quick-suitability">
-            <span
-              v-for="(factor, idx) in ['factor1', 'factor2', 'factor3']"
-              :key="idx"
-              class="suitability-dot"
-              :class="formatSuitability[format.id]?.factors?.[factor]?.status || 'unknown'"
-            ></span>
+            <!-- Quick suitability preview -->
+            <div v-if="formatSuitability[format.id]" class="quick-suitability">
+              <span
+                v-for="(factor, idx) in ['factor1', 'factor2', 'factor3']"
+                :key="idx"
+                class="suitability-dot"
+                :class="formatSuitability[format.id]?.factors?.[factor]?.status || 'unknown'"
+                :title="getSuitabilityLabel(formatSuitability[format.id]?.factors?.[factor]?.status)"
+              ></span>
+            </div>
+            <div v-else class="loading-dots">
+              <span></span><span></span><span></span>
+            </div>
+
+            <!-- Selected checkmark -->
+            <div v-if="selectedFormatId === format.id" class="selected-badge">
+              <el-icon><Check /></el-icon>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Selected Format Details -->
-      <div v-if="selectedFormat && currentSuitability" class="selected-format-details">
-        <el-divider>Suitability Check</el-divider>
-
-        <div class="format-detail-card">
-          <div class="format-info">
-            <h4>
-              <span class="format-icon-large">{{ getFormatEmoji(selectedFormat.format_key) }}</span>
-              {{ selectedFormat.format_name }}
-            </h4>
+      <div v-if="selectedFormat" class="selected-format-details">
+        <div class="details-header">
+          <span class="format-icon-large">{{ getFormatEmoji(selectedFormat.format_key) }}</span>
+          <div class="details-title">
+            <h4>{{ selectedFormat.format_name }}</h4>
             <p class="format-description">{{ selectedFormat.description }}</p>
+            <p v-if="getSeSuitability(selectedFormat.format_key)" class="se-relevance">
+              <span class="se-label">SE Relevance:</span>
+              {{ getSeSuitability(selectedFormat.format_key) }}
+            </p>
+          </div>
+        </div>
 
-            <div class="format-specs">
+        <div class="details-content">
+          <!-- Format Specs -->
+          <div class="specs-card">
+            <div class="spec-row">
               <div class="spec-item">
-                <span class="spec-label">Max Level:</span>
-                <span class="spec-value">{{ selectedFormat.max_level_achievable }}</span>
+                <el-icon><Aim /></el-icon>
+                <div class="spec-text">
+                  <span class="spec-label">Max Achievable Level</span>
+                  <span class="spec-value">{{ getLevelName(selectedFormat.max_level_achievable) }}</span>
+                </div>
               </div>
               <div class="spec-item">
-                <span class="spec-label">Participants:</span>
-                <span class="spec-value">{{ selectedFormat.participant_min }}-{{ selectedFormat.participant_max || 'unlimited' }}</span>
+                <el-icon><User /></el-icon>
+                <div class="spec-text">
+                  <span class="spec-label">Participant Range</span>
+                  <span class="spec-value">{{ selectedFormat.participant_min }} - {{ selectedFormat.participant_max || 'Unlimited' }}</span>
+                </div>
               </div>
             </div>
-
-            <div class="format-characteristics">
-              <el-tag size="small" effect="plain">{{ selectedFormat.mode_of_delivery }}</el-tag>
-              <el-tag size="small" effect="plain">{{ selectedFormat.communication_type }}</el-tag>
-              <el-tag size="small" effect="plain">{{ selectedFormat.collaboration_type }}</el-tag>
+            <div class="characteristics-row">
+              <el-tag size="small" type="info" effect="plain">{{ selectedFormat.mode_of_delivery }}</el-tag>
+              <el-tag size="small" type="info" effect="plain">{{ selectedFormat.communication_type }}</el-tag>
+              <el-tag size="small" type="info" effect="plain">{{ selectedFormat.collaboration_type }}</el-tag>
             </div>
           </div>
 
-          <div class="suitability-details">
+          <!-- Suitability Check -->
+          <div v-if="currentSuitability" class="suitability-card">
+            <div class="suitability-header">
+              <el-icon><DataAnalysis /></el-icon>
+              <span>Suitability Analysis</span>
+            </div>
             <SuitabilityIndicators :suitability="currentSuitability" />
           </div>
         </div>
 
         <!-- Format pros/cons -->
-        <div v-if="selectedFormat.advantages?.length || selectedFormat.disadvantages?.length" class="format-pros-cons">
-          <div v-if="selectedFormat.advantages?.length" class="pros">
-            <h5>Advantages</h5>
+        <div v-if="selectedFormat.advantages?.length || selectedFormat.disadvantages?.length" class="pros-cons-section">
+          <div v-if="selectedFormat.advantages?.length" class="pros-card">
+            <div class="card-header pros-header">
+              <el-icon><CircleCheck /></el-icon>
+              <span>Advantages</span>
+            </div>
             <ul>
               <li v-for="adv in selectedFormat.advantages" :key="adv">{{ adv }}</li>
             </ul>
           </div>
-          <div v-if="selectedFormat.disadvantages?.length" class="cons">
-            <h5>Disadvantages</h5>
+          <div v-if="selectedFormat.disadvantages?.length" class="cons-card">
+            <div class="card-header cons-header">
+              <el-icon><Warning /></el-icon>
+              <span>Considerations</span>
+            </div>
             <ul>
               <li v-for="dis in selectedFormat.disadvantages" :key="dis">{{ dis }}</li>
             </ul>
           </div>
         </div>
       </div>
+
+      <!-- No selection prompt -->
+      <div v-else class="no-selection-prompt">
+        <el-icon :size="48"><Pointer /></el-icon>
+        <p>Select a learning format above to see details and suitability analysis</p>
+      </div>
     </div>
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="dialogVisible = false">Cancel</el-button>
+        <el-button @click="dialogVisible = false" size="large">Cancel</el-button>
         <el-button
           type="primary"
+          size="large"
           :disabled="!selectedFormatId"
           :loading="saving"
           @click="confirmSelection"
         >
+          <el-icon><Check /></el-icon>
           Confirm Selection
         </el-button>
       </div>
@@ -125,7 +174,10 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import {
+  Loading, Check, User, Collection, Aim, DataAnalysis,
+  CircleCheck, Warning, Pointer
+} from '@element-plus/icons-vue'
 import axios from '@/api/axios'
 import SuitabilityIndicators from './SuitabilityIndicators.vue'
 
@@ -182,6 +234,46 @@ const formatEmojis = {
 
 const getFormatEmoji = (formatKey) => {
   return formatEmojis[formatKey] || '📖'
+}
+
+// SE Suitability Descriptions from Sachin Kumar's thesis
+// Source: "Identifying suitable learning formats for Systems Engineering" (2023)
+const seSuitabilityDescriptions = {
+  seminar: 'Highly suitable for building commitment and transdisciplinary collaboration in SE teams. Best for awareness-centered approaches focusing on interdisciplinary exchange.',
+  webinar: 'Balanced format for general SE education with moderate effectiveness across all characteristics. Good for reaching distributed teams when in-person training is not feasible.',
+  coaching: 'Excellent for mindset change and building individual commitment to SE. Ideal for supporting the transition from component-oriented to systems-oriented thinking.',
+  mentoring: 'Excellent for mindset transformation and commitment building through experienced guidance. Best for developing future SE leaders and ensuring knowledge transfer.',
+  wbt: 'Excellent for delivering comprehensive, holistic SE knowledge and stakeholder-specific content. Best combined with interactive formats to build commitment.',
+  cbt: 'Best suited for delivering stakeholder-specific SE content at individual pace. Not recommended for mindset change or building team commitment.',
+  game_based: 'Highly effective for transdisciplinary team building and SE awareness. Ideal as a starting point for SE introduction in interdisciplinary teams with low entry barriers.',
+  conference: 'Useful for exposure to new SE ideas and networking. Limited effectiveness for deep SE characteristic development due to restricted interaction time.',
+  blended: 'The most comprehensive and effective format for SE qualification. Recommended as the primary approach for developing all SE characteristics through combined online and in-person methods.',
+  self_learning: 'Effective for individual study of holistic SE knowledge. Should be combined with interactive formats to develop commitment and transdisciplinary skills.'
+}
+
+const getSeSuitability = (formatKey) => {
+  return seSuitabilityDescriptions[formatKey] || null
+}
+
+// Level name mapping
+const getLevelName = (level) => {
+  const names = {
+    1: 'Knowing',
+    2: 'Understanding',
+    4: 'Applying',
+    6: 'Mastering'
+  }
+  return names[level] || `Level ${level}`
+}
+
+// Suitability label mapping
+const getSuitabilityLabel = (status) => {
+  const labels = {
+    green: 'Good fit',
+    yellow: 'Acceptable',
+    red: 'Not recommended'
+  }
+  return labels[status] || 'Evaluating...'
 }
 
 // Load formats when dialog opens
@@ -308,38 +400,110 @@ const confirmSelection = async () => {
 
 <style scoped>
 .format-selector-dialog :deep(.el-dialog__header) {
-  padding-bottom: 10px;
+  padding: 20px 24px 16px;
   border-bottom: 1px solid #EBEEF5;
+  background: linear-gradient(135deg, #F8FAFC 0%, #EEF2F7 100%);
 }
 
-.dialog-header h3 {
-  margin: 0 0 8px 0;
+.format-selector-dialog :deep(.el-dialog__body) {
+  padding: 20px 24px;
+}
+
+.format-selector-dialog :deep(.el-dialog__footer) {
+  padding: 16px 24px 20px;
+  border-top: 1px solid #EBEEF5;
+  background: #FAFAFA;
+}
+
+/* Header */
+.dialog-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-icon {
+  font-size: 24px;
+  color: #409EFF;
+}
+
+.header-title h3 {
+  margin: 0;
   font-size: 18px;
+  font-weight: 600;
   color: #303133;
 }
 
-.module-context {
-  margin: 0;
+.module-info-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #E4E7ED;
+}
+
+.module-name {
   font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.module-meta {
+  display: flex;
+  gap: 16px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
   color: #606266;
 }
 
-.context-details {
+.meta-item .el-icon {
   color: #909399;
 }
 
+/* Loading */
 .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 80px 20px;
   color: #909399;
 }
 
+.loading-state p {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+/* Content */
 .format-selection-content {
-  max-height: 60vh;
+  max-height: 58vh;
   overflow-y: auto;
+}
+
+/* Format Section */
+.formats-section {
+  margin-bottom: 20px;
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+  margin-bottom: 12px;
 }
 
 /* Format Grid */
@@ -347,13 +511,13 @@ const confirmSelection = async () => {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 12px;
-  margin-bottom: 20px;
 }
 
 .format-card {
-  padding: 16px 12px;
-  border: 2px solid #EBEEF5;
-  border-radius: 8px;
+  position: relative;
+  padding: 16px 10px 12px;
+  border: 2px solid #E4E7ED;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   background: white;
@@ -361,162 +525,311 @@ const confirmSelection = async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .format-card:hover {
   border-color: #409EFF;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
 }
 
 .format-card.selected {
   border-color: #409EFF;
-  background: #ECF5FF;
+  background: linear-gradient(135deg, #ECF5FF 0%, #E8F4FF 100%);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
 }
 
 .format-card.evaluating {
-  opacity: 0.7;
+  opacity: 0.6;
+}
+
+.format-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F5F7FA;
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+
+.format-card.selected .format-icon-wrapper {
+  background: white;
 }
 
 .format-icon {
-  font-size: 28px;
+  font-size: 26px;
 }
 
 .format-name {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #303133;
+  line-height: 1.3;
 }
 
 .quick-suitability {
   display: flex;
   justify-content: center;
   gap: 4px;
+  margin-top: 4px;
 }
 
 .suitability-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #C0C4CC;
+  background: #DCDFE6;
+  transition: all 0.2s;
 }
 
-.suitability-dot.green {
-  background: #67C23A;
+.suitability-dot.green { background: #67C23A; }
+.suitability-dot.yellow { background: #E6A23C; }
+.suitability-dot.red { background: #F56C6C; }
+
+.loading-dots {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
 }
 
-.suitability-dot.yellow {
-  background: #E6A23C;
+.loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #DCDFE6;
+  animation: pulse 1.4s infinite ease-in-out;
 }
 
-.suitability-dot.red {
-  background: #F56C6C;
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes pulse {
+  0%, 80%, 100% { opacity: 0.3; }
+  40% { opacity: 1; }
+}
+
+.selected-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #409EFF;
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.4);
 }
 
 /* Selected Format Details */
 .selected-format-details {
-  padding-top: 16px;
-}
-
-.format-detail-card {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  background: #F8FAFC;
+  border: 1px solid #E4E7ED;
+  border-radius: 12px;
   padding: 20px;
-  background: #F5F7FA;
-  border-radius: 8px;
 }
 
-.format-info h4 {
+.details-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px 0;
-  font-size: 16px;
-  color: #303133;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #EBEEF5;
+  margin-bottom: 16px;
 }
 
 .format-icon-large {
-  font-size: 24px;
+  font-size: 40px;
+  background: white;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.details-title h4 {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .format-description {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 13px;
   color: #606266;
   line-height: 1.5;
 }
 
-.format-specs {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
+.se-relevance {
+  margin: 8px 0 0 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #303133;
+  line-height: 1.5;
+  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%);
+  border-left: 3px solid #409EFF;
+  border-radius: 0 6px 6px 0;
+}
+
+.se-label {
+  font-weight: 600;
+  color: #409EFF;
+  margin-right: 4px;
+}
+
+.details-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Specs Card */
+.specs-card {
   background: white;
-  border-radius: 6px;
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid #EBEEF5;
+}
+
+.spec-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 12px;
 }
 
 .spec-item {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+}
+
+.spec-item > .el-icon {
+  font-size: 18px;
+  color: #409EFF;
+  margin-top: 2px;
+}
+
+.spec-text {
+  display: flex;
+  flex-direction: column;
 }
 
 .spec-label {
-  font-size: 12px;
+  font-size: 11px;
   color: #909399;
+  margin-bottom: 2px;
 }
 
 .spec-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #303133;
 }
 
-.format-characteristics {
+.characteristics-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid #EBEEF5;
 }
 
-.format-characteristics .el-tag {
+.characteristics-row .el-tag {
   text-transform: capitalize;
 }
 
+/* Suitability Card */
+.suitability-card {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid #EBEEF5;
+}
+
+.suitability-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}
+
+.suitability-header .el-icon {
+  color: #409EFF;
+}
+
 /* Pros/Cons */
-.format-pros-cons {
+.pros-cons-section {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 12px;
   margin-top: 16px;
 }
 
-.format-pros-cons h5 {
-  margin: 0 0 8px 0;
-  font-size: 13px;
-  color: #303133;
+.pros-card, .cons-card {
+  background: white;
+  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid #EBEEF5;
 }
 
-.format-pros-cons ul {
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.pros-header {
+  color: #67C23A;
+}
+
+.cons-header {
+  color: #E6A23C;
+}
+
+.pros-card ul, .cons-card ul {
   margin: 0;
   padding-left: 18px;
 }
 
-.format-pros-cons li {
+.pros-card li, .cons-card li {
   font-size: 12px;
   color: #606266;
   margin-bottom: 4px;
+  line-height: 1.4;
 }
 
-.pros h5 {
-  color: #67C23A;
+/* No Selection */
+.no-selection-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #C0C4CC;
+  text-align: center;
 }
 
-.cons h5 {
-  color: #F56C6C;
+.no-selection-prompt p {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #909399;
 }
 
+/* Footer */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
@@ -529,11 +842,11 @@ const confirmSelection = async () => {
     grid-template-columns: repeat(3, 1fr);
   }
 
-  .format-detail-card {
+  .details-content {
     grid-template-columns: 1fr;
   }
 
-  .format-pros-cons {
+  .pros-cons-section {
     grid-template-columns: 1fr;
   }
 }

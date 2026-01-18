@@ -53,34 +53,55 @@ VALID_LEVELS = [1, 2, 4, 6]
 # =============================================================================
 # EXISTING TRAINING EXCLUSION HELPER
 # Feature: "Check and Integrate Existing Offers" (Ulf's request - 11.12.2025)
+# Updated: 2-step level differentiation (Ulf's request - 13.01.2026)
 # =============================================================================
 
-def get_excluded_competency_ids(organization_id: int) -> set:
+def get_existing_training_levels(organization_id: int) -> dict:
     """
-    Get competency IDs that should be excluded from training requirements
-    because organization has existing training for them.
+    Get a mapping of competency IDs to their covered training levels.
 
-    These competencies will be shown in "No Training Required" with
-    "Training Exists" tag instead of being in "Training Requirements Identified".
+    Updated 13.01.2026: Now supports level differentiation. A competency
+    may have existing training for some levels but not others.
 
     Args:
         organization_id: Organization ID
 
     Returns:
-        Set of competency IDs with existing training
+        Dict mapping competency_id -> list of covered levels (e.g., {1: [1, 2], 5: [1, 2, 4]})
     """
     try:
         existing = OrganizationExistingTraining.query.filter_by(
             organization_id=organization_id
         ).all()
-        excluded_ids = {e.competency_id for e in existing}
-        if excluded_ids:
-            logger.info(f"[get_excluded_competency_ids] Org {organization_id}: "
-                       f"{len(excluded_ids)} competencies excluded (existing training)")
-        return excluded_ids
+
+        result = {}
+        for e in existing:
+            result[e.competency_id] = e.get_covered_levels()
+
+        if result:
+            logger.info(f"[get_existing_training_levels] Org {organization_id}: "
+                       f"{len(result)} competencies with existing training levels")
+        return result
     except Exception as e:
-        logger.warning(f"[get_excluded_competency_ids] Error: {str(e)}")
-        return set()
+        logger.warning(f"[get_existing_training_levels] Error: {str(e)}")
+        return {}
+
+
+def get_excluded_competency_ids(organization_id: int) -> set:
+    """
+    Get competency IDs that have ANY existing training.
+
+    DEPRECATED: Use get_existing_training_levels() for level-aware checking.
+    Kept for backward compatibility with cache hash generation.
+
+    Args:
+        organization_id: Organization ID
+
+    Returns:
+        Set of competency IDs with any existing training
+    """
+    existing_levels = get_existing_training_levels(organization_id)
+    return set(existing_levels.keys())
 
 
 # =============================================================================
@@ -680,10 +701,11 @@ def validate_mastery_requirements(
             f"Some competency requirements exceed the current training strategy targets."
         )
 
-    # Generate single, actionable recommendation
+    # Generate actionable recommendations
     recommendations = []
 
     if len(level_6_requirements) > 0 and not ttt_selected:
+        # HIGH severity: Level 6 requirements not covered by TTT
         recommendations.append({
             'action': 'add_ttt_strategy',
             'label': 'Enable Advanced Training',
@@ -693,6 +715,26 @@ def validate_mastery_requirements(
                 'or bring in external experts to train your team to mastery level.'
             ),
             'priority': 'HIGH'
+        })
+    else:
+        # MEDIUM severity: General gaps between role requirements and strategy targets
+        recommendations.append({
+            'action': 'review_strategy',
+            'label': 'Review Strategy Selection',
+            'description': (
+                'Consider selecting additional strategies in Phase 1 Task 3 that provide '
+                'higher competency levels to meet role requirements.'
+            ),
+            'priority': 'MEDIUM'
+        })
+        recommendations.append({
+            'action': 'review_role_requirements',
+            'label': 'Review Role Requirements',
+            'description': (
+                'Verify that the role-competency matrix accurately reflects your organization\'s '
+                'needs. Adjust requirements in Phase 1 Task 2 if needed.'
+            ),
+            'priority': 'MEDIUM'
         })
 
     logger.warning(f"[validate_mastery_requirements] INADEQUATE - {len(affected_combinations)} issues found")
@@ -876,18 +918,24 @@ def process_competency_with_roles(
     """
     Process one competency for high maturity organization.
 
-    Calculate gaps per role, check if ANY user has gap.
+    Calculate gaps per role using ROLE-AWARE targets:
+    - effective_target = MIN(strategy_target, role_requirement)
+    - Roles with requirement=0 are skipped (don't need this competency)
+    - Check if ANY user has gap.
 
     Args:
         org_id: Organization ID
-        competency_id: Competency ID (1-16)
-        target_level: Target level from strategy (0-6)
+        competency_id: Competency ID (1-18)
+        target_level: Target level from strategy (0-6) - the STRATEGY target
 
     Returns:
-        Competency gap data with role-specific details
+        Competency gap data with role-specific details including:
+        - competency_area: For training program assignment logic
+        - role_requirement: Original role requirement from matrix
+        - effective_target: MIN(strategy_target, role_requirement)
     """
 
-    logger.debug(f"[process_competency_with_roles] Org {org_id}, Comp {competency_id}, Target {target_level}")
+    logger.debug(f"[process_competency_with_roles] Org {org_id}, Comp {competency_id}, Strategy Target {target_level}")
 
     roles = OrganizationRoles.query.filter_by(organization_id=org_id).all()
     competency = Competency.query.get(competency_id)
@@ -895,18 +943,35 @@ def process_competency_with_roles(
     competency_data = {
         'competency_id': competency_id,
         'competency_name': competency.competency_name if competency else f"Competency {competency_id}",
-        'target_level': target_level,
+        'competency_area': competency.competency_area if competency else "",  # NEW: For training program assignment
+        'strategy_target': target_level,  # Renamed for clarity
+        'target_level': target_level,  # Keep for backward compatibility
         'has_gap': False,
         'levels_needed': [],
         'roles': {}
     }
 
     if target_level == 0:
-        logger.debug(f"[process_competency_with_roles] Target is 0 - no gaps")
+        logger.debug(f"[process_competency_with_roles] Strategy target is 0 - no gaps")
         return competency_data
 
-    # Process each role
+    # Process each role with role-aware targets
     for role in roles:
+        # NEW: Get role-specific requirement from role-competency matrix
+        role_requirement = get_role_competency_requirement(role.id, competency_id)
+
+        # NEW: Skip roles that don't need this competency (requirement=0)
+        if role_requirement == 0:
+            logger.debug(f"[process_competency_with_roles] Role {role.role_name} has requirement=0, skipping")
+            continue
+
+        # NEW: Calculate effective target = MIN(strategy_target, role_requirement)
+        # This ensures we don't train beyond what the role needs, even if strategy is higher
+        effective_target = min(target_level, role_requirement)
+
+        if effective_target == 0:
+            continue
+
         # Get all users in this role
         user_ids = get_users_in_role(role.id)
 
@@ -926,19 +991,19 @@ def process_competency_with_roles(
         mean_level = calculate_mean(user_scores)
         variance = calculate_variance(user_scores)
 
-        # Determine which levels this role needs
+        # Determine which levels this role needs (using effective_target)
         role_levels_needed = []
         level_details = {}
 
         for level in VALID_LEVELS:
-            if level > target_level:
-                continue  # This level exceeds strategy target
+            if level > effective_target:  # CHANGED: Use effective_target instead of target_level
+                continue  # This level exceeds what this role needs
 
             # Count users needing this level
-            # User needs level if: current_score < level <= target
+            # User needs level if: current_score < level <= effective_target
             users_needing_level = [
                 score for score in user_scores
-                if score < level <= target_level
+                if score < level <= effective_target  # CHANGED: Use effective_target
             ]
 
             if len(users_needing_level) > 0:
@@ -960,10 +1025,10 @@ def process_competency_with_roles(
 
         # Store role data (only if this role has gaps)
         if len(role_levels_needed) > 0:
-            # Calculate overall gap percentage for this role
+            # Calculate overall gap percentage for this role (using effective_target)
             users_below_target = [
                 score for score in user_scores
-                if score < target_level
+                if score < effective_target  # CHANGED: Use effective_target
             ]
             gap_percentage = len(users_below_target) / len(user_scores)
 
@@ -977,6 +1042,8 @@ def process_competency_with_roles(
             competency_data['roles'][role.id] = {
                 'role_id': role.id,
                 'role_name': role.role_name,
+                'role_requirement': role_requirement,  # NEW: Original role requirement
+                'effective_target': effective_target,  # NEW: Actual target used
                 'total_users': len(user_scores),
                 'users_needing_training': len(users_below_target),
                 'gap_percentage': round(gap_percentage * 100, 1),
@@ -1096,6 +1163,168 @@ def process_competency_organizational(
     competency_data['levels_needed'] = sorted(levels_needed)
 
     return competency_data
+
+
+# =============================================================================
+# TRAINING PROGRAM ASSIGNMENT (Role-Aware)
+# Added: 2026-01-18 (Ulf's requirement from 13.01.2026 meeting)
+# =============================================================================
+
+def calculate_training_program_assignments(
+    org_id: int,
+    gaps_by_competency: Dict
+) -> Dict[int, str]:
+    """
+    Assign each role to a training program based on their competency gaps.
+
+    Training Programs (consolidated to 3):
+    - Engineers: Level 4+ gap in Technical OR Core competencies
+    - Managers: Level 4+ gap ONLY in Social/Personal OR Management (no L4+ in Tech/Core)
+    - Interfacing Partners: Only Level 1-2 gaps across all competencies
+
+    This function is called AFTER detect_gaps() during Learning Objectives generation,
+    so we have actual gap data to make informed assignment decisions.
+
+    Args:
+        org_id: Organization ID
+        gaps_by_competency: Dict from detect_gaps()['by_competency']
+            {
+                competency_id: {
+                    'competency_area': str,  # 'Core', 'Technical', 'Social / Personal', 'Management'
+                    'roles': {
+                        role_id: {
+                            'levels_needed': [1, 2, 4],
+                            ...
+                        }
+                    }
+                }
+            }
+
+    Returns:
+        Dict[role_id -> program_name]: Maps each role to a training program
+            "Engineers" | "Managers" | "Interfacing Partners" | None (no gaps)
+
+    Example:
+        >>> assignments = calculate_training_program_assignments(28, gaps_data['by_competency'])
+        >>> print(assignments)
+        {1: 'Engineers', 2: 'Managers', 3: 'Interfacing Partners'}
+    """
+    TECHNICAL_CORE_AREAS = ['Core', 'Technical']
+    SOCIAL_MGMT_AREAS = ['Social / Personal', 'Management']
+
+    logger.info(f"[calculate_training_program_assignments] Processing org {org_id}")
+
+    # Build summary of gaps per role
+    role_gap_summary = {}
+
+    for comp_id, comp_data in gaps_by_competency.items():
+        comp_area = comp_data.get('competency_area', '')
+        roles_data = comp_data.get('roles', {})
+
+        for role_id, role_info in roles_data.items():
+            # Handle both string and int role_ids
+            role_id_int = int(role_id) if isinstance(role_id, str) else role_id
+
+            if role_id_int not in role_gap_summary:
+                role_gap_summary[role_id_int] = {
+                    'role_name': role_info.get('role_name'),
+                    'has_tech_core_l4': False,
+                    'has_social_mgmt_l4': False,
+                    'max_level': 0,
+                    'has_any_gap': False
+                }
+
+            levels_needed = role_info.get('levels_needed', [])
+            if not levels_needed:
+                continue
+
+            role_gap_summary[role_id_int]['has_any_gap'] = True
+            role_gap_summary[role_id_int]['max_level'] = max(
+                role_gap_summary[role_id_int]['max_level'],
+                max(levels_needed)
+            )
+
+            has_level_4_plus = any(level >= 4 for level in levels_needed)
+
+            if has_level_4_plus:
+                if comp_area in TECHNICAL_CORE_AREAS:
+                    role_gap_summary[role_id_int]['has_tech_core_l4'] = True
+                elif comp_area in SOCIAL_MGMT_AREAS:
+                    role_gap_summary[role_id_int]['has_social_mgmt_l4'] = True
+
+    # Determine program assignment for each role
+    assignments = {}
+
+    for role_id, summary in role_gap_summary.items():
+        if not summary['has_any_gap']:
+            assignments[role_id] = None
+            logger.debug(f"[calculate_training_program_assignments] Role {summary['role_name']}: No gaps - excluded")
+            continue
+
+        if summary['has_tech_core_l4']:
+            # Level 4+ in Technical or Core -> Engineers
+            assignments[role_id] = 'Engineers'
+            logger.debug(f"[calculate_training_program_assignments] Role {summary['role_name']}: Engineers (L4+ Tech/Core)")
+        elif summary['has_social_mgmt_l4'] and not summary['has_tech_core_l4']:
+            # Level 4+ ONLY in Social/Management (no Tech/Core L4+) -> Managers
+            assignments[role_id] = 'Managers'
+            logger.debug(f"[calculate_training_program_assignments] Role {summary['role_name']}: Managers (L4+ Social/Mgmt only)")
+        elif summary['max_level'] <= 2:
+            # Only Level 1-2 gaps -> Interfacing Partners
+            assignments[role_id] = 'Interfacing Partners'
+            logger.debug(f"[calculate_training_program_assignments] Role {summary['role_name']}: Interfacing Partners (L1-2 only)")
+        else:
+            # Has Level 3-4 gaps but not in Tech/Core or Social/Mgmt L4+ categories
+            # Default to Interfacing Partners (should be rare)
+            assignments[role_id] = 'Interfacing Partners'
+            logger.debug(f"[calculate_training_program_assignments] Role {summary['role_name']}: Interfacing Partners (default)")
+
+    logger.info(f"[calculate_training_program_assignments] Assignments: {assignments}")
+    return assignments
+
+
+def save_training_program_assignments(org_id: int, assignments: Dict[int, str]) -> int:
+    """
+    Save training program assignments to organization_roles table.
+
+    Updates the training_program_cluster_id column for each role based on
+    the calculated assignments.
+
+    Args:
+        org_id: Organization ID
+        assignments: Dict from calculate_training_program_assignments()
+            {role_id: program_name}
+
+    Returns:
+        Number of roles updated
+
+    Cluster ID Mapping:
+        1 = Engineers
+        2 = Managers
+        3 = Interfacing Partners
+    """
+    PROGRAM_TO_CLUSTER_ID = {
+        'Engineers': 1,
+        'Managers': 2,
+        'Interfacing Partners': 3
+    }
+
+    updated_count = 0
+
+    for role_id, program in assignments.items():
+        if program:
+            cluster_id = PROGRAM_TO_CLUSTER_ID.get(program)
+            if cluster_id:
+                role = OrganizationRoles.query.get(role_id)
+                if role and role.organization_id == org_id:
+                    role.training_program_cluster_id = cluster_id
+                    updated_count += 1
+                    logger.debug(f"[save_training_program_assignments] Role {role_id} -> {program} (cluster {cluster_id})")
+
+    db.session.commit()
+    logger.info(f"[save_training_program_assignments] Updated {updated_count} roles for org {org_id}")
+
+    return updated_count
 
 
 # =============================================================================
@@ -2435,10 +2664,11 @@ def structure_pyramid_output(
     all_competency_ids = get_all_competency_ids()
     gaps_by_competency = gaps_data.get('by_competency', {})
 
-    # Get excluded competencies (existing training offers)
-    excluded_comp_ids = get_excluded_competency_ids(org_id)
-    if excluded_comp_ids:
-        logger.info(f"[structure_pyramid_output] Excluding {len(excluded_comp_ids)} competencies with existing training")
+    # Get existing training levels (competency_id -> covered levels mapping)
+    # Updated 13.01.2026: Now level-aware, not just competency-aware
+    existing_training_map = get_existing_training_levels(org_id)
+    if existing_training_map:
+        logger.info(f"[structure_pyramid_output] {len(existing_training_map)} competencies with existing training (level-aware)")
 
     pyramid = {
         'levels': {},
@@ -2509,14 +2739,16 @@ def structure_pyramid_output(
                         # Use the minimum median (most common gap case)
                         current_level = min(role_medians)
 
-            # Check if competency has existing training (should be excluded)
-            has_existing_training = competency_id in excluded_comp_ids
+            # Check if THIS LEVEL has existing training (level-aware check)
+            # Updated 13.01.2026: Only mark as training_exists if this specific level is covered
+            covered_levels = existing_training_map.get(competency_id, [])
+            has_existing_training_for_level = level in covered_levels
 
-            # Override status if excluded due to existing training
-            if has_existing_training:
+            # Override status if this specific level is excluded due to existing training
+            if has_existing_training_for_level:
                 status = 'training_exists'
                 grayed_out = True
-                message = 'Training already exists in organization'
+                message = f'Training already exists for this level (covered levels: {", ".join(map(str, covered_levels))})'
 
             # Build competency card data
             competency_card = {
@@ -2528,7 +2760,8 @@ def structure_pyramid_output(
                 'current_level': current_level,  # Add current level for UI display
                 'learning_objective': learning_objective,
                 'gap_data': gap_data if not grayed_out else None,
-                'has_existing_training': has_existing_training  # Flag for UI
+                'has_existing_training': has_existing_training_for_level,  # Level-specific flag
+                'existing_training_covered_levels': covered_levels if covered_levels else None  # For UI info
             }
 
             if grayed_out:
@@ -2904,6 +3137,22 @@ def generate_complete_learning_objectives(
             f"[ALGORITHM 3+4] Complete - Has roles: {has_roles}, "
             f"Processed {len(gaps_data['by_competency'])} competencies"
         )
+
+        # =================================================================
+        # TRAINING PROGRAM ASSIGNMENT (Role-Aware)
+        # Only for high maturity orgs with roles defined
+        # Added: 2026-01-18 (Ulf's requirement from 13.01.2026 meeting)
+        # =================================================================
+        if has_roles:
+            logger.info("[TRAINING ASSIGNMENT] Calculating role-based training program assignments...")
+            training_assignments = calculate_training_program_assignments(
+                org_id,
+                gaps_data['by_competency']
+            )
+            updated_count = save_training_program_assignments(org_id, training_assignments)
+            logger.info(f"[TRAINING ASSIGNMENT] Complete - Updated {updated_count} roles")
+        else:
+            logger.info("[TRAINING ASSIGNMENT] Skipped - Low maturity org (no roles defined)")
 
         # =================================================================
         # ALGORITHM 5: Process TTT Gaps

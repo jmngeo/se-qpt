@@ -99,42 +99,54 @@
           </div>
         </div>
 
-        <!-- Option 2: Role-Clustered Based -->
+        <!-- Option 2: Training Packages (Role-Clustered Based) -->
         <div
           class="view-option-card"
           :class="{ 'selected': selectedView === 'role_clustered' }"
           @click="selectedView = 'role_clustered'"
         >
           <div class="option-header">
-            <el-icon :size="36" color="#67C23A"><UserFilled /></el-icon>
+            <el-icon :size="36" color="#67C23A"><Suitcase /></el-icon>
             <div class="option-selection">
               <el-radio v-model="selectedView" label="role_clustered" size="large">
-                <span class="sr-only">Select Role-Clustered Based</span>
+                <span class="sr-only">Select Training Packages</span>
               </el-radio>
             </div>
           </div>
 
-          <h3>Role-Clustered Based</h3>
+          <h3>Training Packages</h3>
           <p class="option-description">
-            Training by role groups - organize training programs for specific role clusters with multiple competencies.
+            Pre-built training packages tailored to role clusters. Modules are bundled based on the competency needs of each role group.
           </p>
+
+          <div class="option-packages">
+            <div class="package-preview">
+              <span class="package-name">SE for Engineers</span>
+              <span class="package-desc">Applying/Mastering levels - Common base + role-specific pathways</span>
+            </div>
+            <div class="package-preview">
+              <span class="package-name">SE for Managers</span>
+              <span class="package-desc">Management & Social competencies focus</span>
+            </div>
+            <div class="package-preview">
+              <span class="package-name">SE for Interfacing Partners</span>
+              <span class="package-desc">Knowing/Understanding levels - Basic awareness modules</span>
+            </div>
+          </div>
 
           <div class="option-details">
             <div class="detail-item">
-              <strong>Best for:</strong> Role-specific development programs
+              <strong>Best for:</strong> Organizations with defined role structures
             </div>
             <div class="detail-item">
-              <strong>Example:</strong> "SE for Engineers" program
-            </div>
-            <div class="detail-item">
-              <strong>Contains:</strong> Multiple competency modules per role cluster
+              <strong>Benefit:</strong> Ready-made programs based on actual competency gaps
             </div>
           </div>
 
           <div class="option-pros">
+            <el-tag type="success" size="small" effect="plain">Ready Packages</el-tag>
             <el-tag type="success" size="small" effect="plain">Role-Tailored</el-tag>
-            <el-tag type="success" size="small" effect="plain">Career Development</el-tag>
-            <el-tag type="success" size="small" effect="plain">Team Cohesion</el-tag>
+            <el-tag type="success" size="small" effect="plain">Gap-Based</el-tag>
           </div>
         </div>
       </div>
@@ -159,7 +171,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Loading, Grid, UserFilled, ArrowRight, QuestionFilled
+  Loading, Grid, UserFilled, ArrowRight, QuestionFilled, Suitcase
 } from '@element-plus/icons-vue'
 import axios from '@/api/axios'
 
@@ -409,6 +421,39 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Package Preview Styles */
+.option-packages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  border: 1px solid #E4E7ED;
+}
+
+.package-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: #F5F7FA;
+  border-radius: 6px;
+  border-left: 3px solid #67C23A;
+}
+
+.package-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.package-desc {
+  font-size: 11px;
+  color: #909399;
 }
 
 .action-buttons {

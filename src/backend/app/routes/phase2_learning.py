@@ -1262,6 +1262,8 @@ def export_excel(data, org_name):
     GAP_FILL = PatternFill(start_color='FFEB9C', end_color='FFEB9C', fill_type='solid')  # Light yellow/orange
     NOT_TARGETED_FILL = PatternFill(start_color='D9D9D9', end_color='D9D9D9', fill_type='solid')  # Gray
     NOT_TARGETED_FONT = Font(color='808080', italic=True)  # Gray italic text
+    TRAINING_EXISTS_FILL = PatternFill(start_color='BDD7EE', end_color='BDD7EE', fill_type='solid')  # Light blue
+    TRAINING_EXISTS_FONT = Font(color='2F5496', italic=True)  # Blue italic text
     THIN_BORDER = Border(
         left=Side(style='thin'),
         right=Side(style='thin'),
@@ -1395,6 +1397,12 @@ def export_excel(data, org_name):
     sheet[f'A{row}'].fill = NOT_TARGETED_FILL
     sheet[f'A{row}'].font = NOT_TARGETED_FONT
     sheet[f'B{row}'] = 'Not targeted by selected strategies'
+    row += 1
+
+    sheet[f'A{row}'] = 'Blue'
+    sheet[f'A{row}'].fill = TRAINING_EXISTS_FILL
+    sheet[f'A{row}'].font = TRAINING_EXISTS_FONT
+    sheet[f'B{row}'] = 'Existing training covers this level (no new training needed)'
     row += 2
 
     # ========== COMPETENCY TABLE ==========
@@ -1466,7 +1474,13 @@ def export_excel(data, org_name):
                     cell.fill = NOT_TARGETED_FILL
                     cell.font = NOT_TARGETED_FONT
 
-                elif status == 'achieved' or (grayed_out and status != 'training_required'):
+                elif status == 'training_exists':
+                    # TRAINING EXISTS - blue cell indicating existing training covers this level
+                    cell.fill = TRAINING_EXISTS_FILL
+                    cell.font = TRAINING_EXISTS_FONT
+                    cell.value = 'Covered by existing training'
+
+                elif status == 'achieved' or (grayed_out and status not in ['training_required', 'training_exists']):
                     # ACHIEVED - green cell with LO text
                     cell.fill = ACHIEVED_FILL
 
@@ -1950,20 +1964,29 @@ def api_update_existing_trainings(organization_id):
     """
     Update the list of competencies with existing training.
 
-    Accepts a list of competency IDs to mark as having existing training.
-    This replaces all previous selections for the organization.
+    Supports two formats:
 
-    Request Body:
+    NEW FORMAT (with level differentiation - 2-step process):
+        {
+            "trainings": [
+                {"competency_id": 1, "covered_levels": [1, 2]},
+                {"competency_id": 5, "covered_levels": [1, 2, 4]},
+                {"competency_id": 7, "covered_levels": [1]}
+            ],
+            "username": "admin"
+        }
+
+    LEGACY FORMAT (backward compatible - all levels excluded):
         {
             "competency_ids": [1, 5, 7],
-            "username": "admin"  // optional: who made this change
+            "username": "admin"
         }
 
     Response:
         {
             "success": true,
             "message": "Updated existing trainings: 3 competencies marked",
-            "competency_ids": [1, 5, 7]
+            "trainings": [...]
         }
 
     Side Effects:
@@ -1979,19 +2002,58 @@ def api_update_existing_trainings(organization_id):
             }), 404
 
         data = request.get_json() or {}
-        competency_ids = data.get('competency_ids', [])
         username = data.get('username', 'system')
 
-        # Validate competency IDs exist
-        if competency_ids:
-            valid_comps = Competency.query.filter(Competency.id.in_(competency_ids)).all()
-            valid_ids = {c.id for c in valid_comps}
-            invalid_ids = set(competency_ids) - valid_ids
-            if invalid_ids:
-                return jsonify({
-                    'success': False,
-                    'error': f'Invalid competency IDs: {list(invalid_ids)}'
-                }), 400
+        # Determine format: new (trainings) or legacy (competency_ids)
+        trainings_data = data.get('trainings', None)
+        competency_ids = data.get('competency_ids', None)
+
+        # Build list of entries to create
+        entries_to_create = []
+
+        if trainings_data is not None:
+            # NEW FORMAT: trainings with level differentiation
+            for training in trainings_data:
+                comp_id = training.get('competency_id')
+                covered_levels = training.get('covered_levels', [1, 2, 4])
+
+                # Validate competency exists
+                if not Competency.query.get(comp_id):
+                    return jsonify({
+                        'success': False,
+                        'error': f'Invalid competency ID: {comp_id}'
+                    }), 400
+
+                # Validate levels
+                valid_levels = {1, 2, 4}
+                if not all(lvl in valid_levels for lvl in covered_levels):
+                    return jsonify({
+                        'success': False,
+                        'error': f'Invalid levels for competency {comp_id}. Valid levels: 1, 2, 4'
+                    }), 400
+
+                entries_to_create.append({
+                    'competency_id': comp_id,
+                    'covered_levels': json.dumps(sorted(covered_levels))
+                })
+
+        elif competency_ids is not None:
+            # LEGACY FORMAT: just competency IDs (all levels)
+            if competency_ids:
+                valid_comps = Competency.query.filter(Competency.id.in_(competency_ids)).all()
+                valid_ids = {c.id for c in valid_comps}
+                invalid_ids = set(competency_ids) - valid_ids
+                if invalid_ids:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Invalid competency IDs: {list(invalid_ids)}'
+                    }), 400
+
+                for comp_id in competency_ids:
+                    entries_to_create.append({
+                        'competency_id': comp_id,
+                        'covered_levels': '[1, 2, 4]'  # All levels
+                    })
 
         # Clear existing entries for this organization
         OrganizationExistingTraining.query.filter_by(
@@ -1999,10 +2061,11 @@ def api_update_existing_trainings(organization_id):
         ).delete()
 
         # Add new entries
-        for comp_id in competency_ids:
+        for entry_data in entries_to_create:
             entry = OrganizationExistingTraining(
                 organization_id=organization_id,
-                competency_id=comp_id,
+                competency_id=entry_data['competency_id'],
+                covered_levels=entry_data['covered_levels'],
                 created_by=username
             )
             db.session.add(entry)
@@ -2018,12 +2081,17 @@ def api_update_existing_trainings(organization_id):
             print(f"[api_update_existing_trainings] Cache invalidation warning: {str(cache_error)}")
             # Continue - cache invalidation failure shouldn't block the update
 
-        print(f"[api_update_existing_trainings] Updated existing trainings for org {organization_id}: {len(competency_ids)} competencies")
+        print(f"[api_update_existing_trainings] Updated existing trainings for org {organization_id}: {len(entries_to_create)} competencies")
+
+        # Fetch created entries to return
+        created = OrganizationExistingTraining.query.filter_by(
+            organization_id=organization_id
+        ).all()
 
         return jsonify({
             'success': True,
-            'message': f'Updated existing trainings: {len(competency_ids)} competencies marked',
-            'competency_ids': competency_ids
+            'message': f'Updated existing trainings: {len(entries_to_create)} competencies marked',
+            'trainings': [e.to_dict() for e in created]
         }), 200
 
     except Exception as e:
