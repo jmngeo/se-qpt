@@ -2079,8 +2079,8 @@ This includes requirements engineering, architectural modelling, test specificat
                 hdr_cells[i].paragraphs[0].runs[0].font.bold = True
                 self._set_cell_shading(hdr_cells[i], "455A64")
 
-            # Data rows
-            for role in roles[:15]:  # Limit to 15 rows
+            # Data rows - show all roles
+            for role in roles:
                 row_cells = table.add_row().cells
                 row_cells[0].text = role.get('name', '-')
                 row_cells[1].text = role.get('se_cluster_name', '-') or '-'
@@ -2147,8 +2147,8 @@ This includes requirements engineering, architectural modelling, test specificat
                 hdr_cells[i].paragraphs[0].runs[0].font.bold = True
                 self._set_cell_shading(hdr_cells[i], "455A64")
 
-            # Data rows (limit to 20)
-            for m in modules[:20]:
+            # Data rows - show all modules
+            for m in modules:
                 row_cells = table.add_row().cells
                 level_name = self.LEVEL_NAMES.get(m.get('target_level', 0), 'N/A')
 
