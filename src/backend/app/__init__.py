@@ -72,6 +72,7 @@ def create_app(config_name='development'):
     from app.routes.phase2_assessment import phase2_assessment_bp
     from app.routes.phase2_learning import phase2_learning_bp
     from app.routes.phase3_planning import phase3_planning_bp
+    from app.routes.phase4_aviva import phase4_aviva_bp
     from app.routes.main import main_bp
     from app.competency_service import competency_service_bp
 
@@ -84,10 +85,11 @@ def create_app(config_name='development'):
     app.register_blueprint(phase2_assessment_bp, url_prefix='/api')
     app.register_blueprint(phase2_learning_bp, url_prefix='/api')
     app.register_blueprint(phase3_planning_bp, url_prefix='/api')
+    app.register_blueprint(phase4_aviva_bp, url_prefix='/api')
     app.register_blueprint(main_bp, url_prefix='/api')
     app.register_blueprint(competency_service_bp, url_prefix='/api/competency')
 
-    print("[OK] All 9 route blueprints registered successfully:"
+    print("[OK] All 10 route blueprints registered successfully:"
           "\n  - auth_bp: /api/mvp/auth/*, /api/auth/*"
           "\n  - org_bp: /api/organization/*"
           "\n  - phase1_maturity_bp: /api/phase1/maturity/*"
@@ -96,6 +98,7 @@ def create_app(config_name='development'):
           "\n  - phase2_assessment_bp: /api/phase2/*, /api/assessment/*"
           "\n  - phase2_learning_bp: /api/phase2/learning-objectives/*"
           "\n  - phase3_planning_bp: /api/phase3/*"
+          "\n  - phase4_aviva_bp: /api/phase4/* (AVIVA Didactics)"
           "\n  - main_bp: /api/ (misc routes)")
 
     # Import Derik's routes - Enable competency assessor integration

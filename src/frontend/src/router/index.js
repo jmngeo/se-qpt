@@ -24,6 +24,7 @@ import TakeAssessment from '@/views/assessments/TakeAssessment.vue'
 import PhaseOne from '@/views/phases/PhaseOne.vue'
 import PhaseTwo from '@/views/phases/PhaseTwo.vue'
 import PhaseThree from '@/views/phases/PhaseThree.vue'
+import PhaseFour from '@/views/phases/PhaseFour.vue'
 
 // Qualification Plan views
 import QualificationPlans from '@/views/plans/QualificationPlans.vue'
@@ -222,6 +223,23 @@ const routes = [
           } else {
             const nextPhase = getNextAvailablePhase()
             ElMessage.warning('Please complete previous phases before accessing Phase 3')
+            next(`/app/phases/${nextPhase}`)
+          }
+        }
+      },
+      {
+        path: 'phases/4',
+        name: 'PhaseFour',
+        component: PhaseFour,
+        meta: { title: 'Phase 4: Micro Planning', phase: 4 },
+        beforeEnter: async (to, from, next) => {
+          const { checkPhaseCompletion, canAccessPhase, getNextAvailablePhase } = usePhaseProgression()
+          await checkPhaseCompletion() // Refresh phase status from database
+          if (canAccessPhase(4)) {
+            next()
+          } else {
+            const nextPhase = getNextAvailablePhase()
+            ElMessage.warning('Please complete previous phases before accessing Phase 4')
             next(`/app/phases/${nextPhase}`)
           }
         }
