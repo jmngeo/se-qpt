@@ -2102,6 +2102,9 @@ This includes requirements engineering, architectural modelling, test specificat
         modules = phase3.get('modules', [])
         summary = phase3.get('summary', {})
         timeline = phase3.get('timeline', {})
+        config = phase3.get('config', {})
+        view_type = config.get('selected_view', 'competency_level')
+        is_role_clustered = view_type == 'role_clustered'
 
         # 3.1 Key Competencies
         doc.add_heading('3.1 Key Competencies', level=2)
@@ -2125,6 +2128,7 @@ This includes requirements engineering, architectural modelling, test specificat
 
         format_dist = summary.get('format_distribution', {})
         doc.add_paragraph(f"Total Training Modules: {len(modules)}")
+        doc.add_paragraph(f"Training View: {'Role-Clustered' if is_role_clustered else 'Competency-Level'}")
 
         if format_dist:
             doc.add_paragraph("Format Distribution:")
@@ -2135,12 +2139,35 @@ This includes requirements engineering, architectural modelling, test specificat
         if modules:
             doc.add_paragraph()  # Spacing
 
-            table = doc.add_table(rows=1, cols=4)
+            # Sort modules based on view type
+            if is_role_clustered:
+                cluster_order = {'SE for Engineers': 0, 'SE for Managers': 1, 'SE for Interfacing Partners': 2}
+                sorted_modules = sorted(modules, key=lambda m: (
+                    cluster_order.get(m.get('cluster_name', ''), 99),
+                    m.get('subcluster') or 'z',  # 'common' before 'pathway'
+                    m.get('competency_id', 0),
+                    m.get('target_level', 0)
+                ))
+            else:
+                sorted_modules = sorted(modules, key=lambda m: (
+                    m.get('competency_id', 0),
+                    m.get('target_level', 0)
+                ))
+
+            # Different table structure based on view type
+            if is_role_clustered:
+                # Role-clustered: Training Program, Type, Module, Level, Format, Roles, Est. Participants
+                table = doc.add_table(rows=1, cols=7)
+                headers = ['Training Program', 'Type', 'Module', 'Level', 'Format', 'Roles', 'Participants']
+            else:
+                # Competency-level: Module, Level, Format, Roles, Est. Participants
+                table = doc.add_table(rows=1, cols=5)
+                headers = ['Module', 'Level', 'Format', 'Roles', 'Participants']
+
             table.style = 'Table Grid'
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
             # Header
-            headers = ['Module', 'Level', 'Format', 'Est. Participants']
             hdr_cells = table.rows[0].cells
             for i, header in enumerate(headers):
                 hdr_cells[i].text = header
@@ -2148,7 +2175,7 @@ This includes requirements engineering, architectural modelling, test specificat
                 self._set_cell_shading(hdr_cells[i], "455A64")
 
             # Data rows - show all modules
-            for m in modules:
+            for m in sorted_modules:
                 row_cells = table.add_row().cells
                 level_name = self.LEVEL_NAMES.get(m.get('target_level', 0), 'N/A')
 
@@ -2157,10 +2184,40 @@ This includes requirements engineering, architectural modelling, test specificat
                 format_name = (m.get('learning_format_name') or
                               selected_format.get('format_name') or '-')
 
-                row_cells[0].text = m.get('competency_name', '-')
-                row_cells[1].text = level_name
-                row_cells[2].text = format_name
-                row_cells[3].text = str(m.get('estimated_participants', 0))
+                # Build module display name with PMT type if applicable
+                competency_name = m.get('competency_name', '-')
+                pmt_type = m.get('pmt_type', '')
+                if pmt_type and pmt_type.lower() not in ['combined', '', 'null', 'none']:
+                    module_display_name = f"{competency_name} ({pmt_type.capitalize()})"
+                else:
+                    module_display_name = competency_name
+
+                # Get roles
+                roles = m.get('roles_needing_training', [])
+                roles_str = ', '.join(roles) if roles and isinstance(roles, list) else '-'
+
+                if is_role_clustered:
+                    # Determine module type
+                    cluster_name = m.get('cluster_name', '-')
+                    subcluster = m.get('subcluster')
+                    if 'Engineer' in (cluster_name or ''):
+                        module_type = 'Common Base' if subcluster == 'common' else 'Role-Specific'
+                    else:
+                        module_type = '-'
+
+                    row_cells[0].text = cluster_name
+                    row_cells[1].text = module_type
+                    row_cells[2].text = module_display_name
+                    row_cells[3].text = level_name
+                    row_cells[4].text = format_name
+                    row_cells[5].text = roles_str
+                    row_cells[6].text = str(m.get('estimated_participants', 0))
+                else:
+                    row_cells[0].text = module_display_name
+                    row_cells[1].text = level_name
+                    row_cells[2].text = format_name
+                    row_cells[3].text = roles_str
+                    row_cells[4].text = str(m.get('estimated_participants', 0))
 
         # 3.3 Timeline
         doc.add_heading('3.3 Timeline', level=2)
