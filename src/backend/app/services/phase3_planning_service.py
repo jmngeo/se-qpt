@@ -319,14 +319,16 @@ class Phase3PlanningService:
         }
 
     def _get_existing_selections(self, organization_id: int, view_type: str = 'competency_level') -> Dict[str, Dict]:
-        """Get existing format selections for an organization"""
+        """Get existing format selections for an organization, including format details"""
         result = self.db.execute(
             text("""
-                SELECT competency_id, target_level, pmt_type, training_program_cluster_id,
-                       selected_format_id, estimated_participants, confirmed,
-                       suitability_factor1_status, suitability_factor2_status, suitability_factor3_status
-                FROM phase3_training_module
-                WHERE organization_id = :org_id
+                SELECT tm.id, tm.competency_id, tm.target_level, tm.pmt_type, tm.training_program_cluster_id,
+                       tm.selected_format_id, tm.estimated_participants, tm.confirmed,
+                       tm.suitability_factor1_status, tm.suitability_factor2_status, tm.suitability_factor3_status,
+                       lf.format_name, lf.short_name, lf.mode_of_delivery
+                FROM phase3_training_module tm
+                LEFT JOIN learning_format lf ON tm.selected_format_id = lf.id
+                WHERE tm.organization_id = :org_id
             """),
             {'org_id': organization_id}
         )
@@ -339,8 +341,20 @@ class Phase3PlanningService:
             else:
                 key = f"{row.competency_id}_{row.target_level}_{row.pmt_type}"
 
+            # Build selected_format object if format_id exists
+            selected_format = None
+            if row.selected_format_id:
+                selected_format = {
+                    'id': row.selected_format_id,
+                    'format_name': row.format_name,
+                    'short_name': row.short_name,
+                    'mode_of_delivery': row.mode_of_delivery
+                }
+
             selections[key] = {
+                'id': row.id,  # Include module ID for Phase 4 preview
                 'selected_format_id': row.selected_format_id,
+                'selected_format': selected_format,  # Include full format object
                 'estimated_participants': row.estimated_participants,
                 'confirmed': row.confirmed,
                 'cluster_id': row.training_program_cluster_id,
@@ -439,9 +453,10 @@ class Phase3PlanningService:
                 competency_id = comp.get('competency_id')
                 competency_name = comp.get('competency_name', competencies.get(competency_id, 'Unknown'))
 
-                # Check if PMT breakdown exists
+                # Check if PMT breakdown exists and get the actual breakdown
                 lo_data = comp.get('learning_objective', {})
                 has_pmt = lo_data.get('has_pmt_breakdown', False)
+                pmt_breakdown = lo_data.get('pmt_breakdown', {})
 
                 # Get users with gap (for participant estimation)
                 gap_data = comp.get('gap_data', {})
@@ -484,13 +499,19 @@ class Phase3PlanningService:
                 # Calculate estimated participants
                 estimated_participants = int(users_with_gap * scaling_info['scaling_factor'])
 
-                if has_pmt:
-                    # Create separate modules for Method and Tool
+                if has_pmt and pmt_breakdown:
+                    # Create modules only for PMT types that exist in the breakdown
+                    # Skip 'process' - only create Method and Tool modules
                     for pmt_type in ['method', 'tool']:
+                        # Only create module if this PMT type exists in the breakdown
+                        if pmt_type not in pmt_breakdown or not pmt_breakdown.get(pmt_type):
+                            continue
+
                         key = f"{competency_id}_{target_level}_{pmt_type}"
                         selection = existing_selections.get(key, {})
 
                         modules.append({
+                            'id': selection.get('id'),  # Module ID from phase3_training_module
                             'competency_id': competency_id,
                             'competency_name': competency_name,
                             'target_level': target_level,
@@ -500,15 +521,18 @@ class Phase3PlanningService:
                             'estimated_participants': estimated_participants,
                             'roles_needing_training': roles_needing,
                             'selected_format_id': selection.get('selected_format_id'),
+                            'selected_format': selection.get('selected_format'),  # Include format details
                             'confirmed': selection.get('confirmed', False),
-                            'suitability': selection.get('suitability')
+                            'suitability': selection.get('suitability'),
+                            'learning_objective': pmt_breakdown.get(pmt_type)  # Include PMT-specific LO
                         })
                 else:
-                    # Single combined module
+                    # Single combined module (no PMT breakdown)
                     key = f"{competency_id}_{target_level}_combined"
                     selection = existing_selections.get(key, {})
 
                     modules.append({
+                        'id': selection.get('id'),  # Module ID from phase3_training_module
                         'competency_id': competency_id,
                         'competency_name': competency_name,
                         'target_level': target_level,
@@ -518,8 +542,10 @@ class Phase3PlanningService:
                         'estimated_participants': estimated_participants,
                         'roles_needing_training': roles_needing,
                         'selected_format_id': selection.get('selected_format_id'),
+                        'selected_format': selection.get('selected_format'),  # Include format details
                         'confirmed': selection.get('confirmed', False),
-                        'suitability': selection.get('suitability')
+                        'suitability': selection.get('suitability'),
+                        'learning_objective': lo_data.get('objective_text', '')  # Include unified LO
                     })
 
         return modules
@@ -574,6 +600,7 @@ class Phase3PlanningService:
 
                 lo_data = comp.get('learning_objective', {})
                 has_pmt = lo_data.get('has_pmt_breakdown', False)
+                pmt_breakdown = lo_data.get('pmt_breakdown', {})
 
                 gap_data = comp.get('gap_data', {})
                 roles_data = gap_data.get('roles', {})
@@ -642,12 +669,18 @@ class Phase3PlanningService:
                             subcluster = 'pathway'
                             pathway_roles = roles_needing
 
-                    if has_pmt:
+                    if has_pmt and pmt_breakdown:
+                        # Create modules only for PMT types that exist in the breakdown
                         for pmt_type in ['method', 'tool']:
+                            # Only create module if this PMT type exists in the breakdown
+                            if pmt_type not in pmt_breakdown or not pmt_breakdown.get(pmt_type):
+                                continue
+
                             key = f"{competency_id}_{target_level}_{pmt_type}_{cluster_id}"
                             selection = existing_selections.get(key, {})
 
                             module_data = {
+                                'id': selection.get('id'),  # Module ID from phase3_training_module
                                 'competency_id': competency_id,
                                 'competency_name': competency_name,
                                 'target_level': target_level,
@@ -659,8 +692,10 @@ class Phase3PlanningService:
                                 'estimated_participants': estimated_participants,
                                 'roles_needing_training': roles_needing,
                                 'selected_format_id': selection.get('selected_format_id'),
+                                'selected_format': selection.get('selected_format'),  # Include format details
                                 'confirmed': selection.get('confirmed', False),
-                                'suitability': selection.get('suitability')
+                                'suitability': selection.get('suitability'),
+                                'learning_objective': pmt_breakdown.get(pmt_type)  # Include PMT-specific LO
                             }
                             # Add subcluster info for Engineers
                             if subcluster:
@@ -671,10 +706,12 @@ class Phase3PlanningService:
 
                             modules.append(module_data)
                     else:
+                        # Single combined module (no PMT breakdown)
                         key = f"{competency_id}_{target_level}_combined_{cluster_id}"
                         selection = existing_selections.get(key, {})
 
                         module_data = {
+                            'id': selection.get('id'),  # Module ID from phase3_training_module
                             'competency_id': competency_id,
                             'competency_name': competency_name,
                             'target_level': target_level,
@@ -686,8 +723,10 @@ class Phase3PlanningService:
                             'estimated_participants': estimated_participants,
                             'roles_needing_training': roles_needing,
                             'selected_format_id': selection.get('selected_format_id'),
+                            'selected_format': selection.get('selected_format'),  # Include format details
                             'confirmed': selection.get('confirmed', False),
-                            'suitability': selection.get('suitability')
+                            'suitability': selection.get('suitability'),
+                            'learning_objective': lo_data.get('objective_text', '')  # Include unified LO
                         }
                         # Add subcluster info for Engineers
                         if subcluster:

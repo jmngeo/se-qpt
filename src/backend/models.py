@@ -582,7 +582,7 @@ class UnknownRoleProcessMatrix(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint('organization_id', 'iso_process_id', 'user_name', name='unknown_role_process_matrix_unique'),
-        db.CheckConstraint("role_process_value IN (-100, 0, 1, 2, 4)", name="unknown_role_process_matrix_role_process_value_check"),
+        db.CheckConstraint("role_process_value IN (-100, 0, 1, 2, 3)", name="unknown_role_process_matrix_role_process_value_check"),
     )
 
     def to_dict(self):

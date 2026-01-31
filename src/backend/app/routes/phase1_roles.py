@@ -293,24 +293,8 @@ def save_roles():
         saved_roles = []
         roles_to_add = []  # Track which roles we're adding (for matrix initialization)
 
-        # SE Role Cluster -> Training Program Cluster mapping
-        # Based on Phase 3 spec: Maps 14 SE clusters to 6 Training clusters
-        SE_TO_TRAINING_CLUSTER_MAP = {
-            1: 5,   # Customer -> External Partners
-            2: 5,   # Customer Rep -> External Partners
-            3: 2,   # Project Manager -> Managers
-            4: 1,   # System Engineer -> Engineers
-            5: 1,   # Specialist Developer -> Engineers
-            6: 6,   # Production Planner -> Operations
-            7: 6,   # Production Employee -> Operations
-            8: 4,   # Quality Engineer -> Support Staff
-            9: 4,   # V&V Operator -> Support Staff
-            10: 6,  # Service Technician -> Operations
-            11: 2,  # Process Manager -> Managers
-            12: 4,  # Internal Support -> Support Staff
-            13: 1,  # Innovation Mgmt -> Engineers
-            14: 3,  # Management -> Executives
-        }
+        # NOTE: Training Program Cluster assignment is done in Phase 2 (Learning Objectives)
+        # based on competency gaps, NOT here in Phase 1 Task 2.
 
         for role in roles:
             # Extract role data
@@ -319,11 +303,6 @@ def save_roles():
             standard_role_cluster_id = role.get('standardRoleId')  # NULL for custom roles
             role_identification_method = role.get('identificationMethod', 'STANDARD')
             participating = role.get('participatingInTraining', True)
-
-            # Get Training Program Cluster from frontend or derive from SE Role Cluster
-            training_program_cluster_id = role.get('trainingClusterId') or role.get('training_program_cluster_id')
-            if not training_program_cluster_id and standard_role_cluster_id:
-                training_program_cluster_id = SE_TO_TRAINING_CLUSTER_MAP.get(standard_role_cluster_id)
 
             if not role_name:
                 current_app.logger.warning(f"[ROLE SAVE] Skipping role with empty name for org {org_id}")
@@ -337,22 +316,18 @@ def save_roles():
                 # This role hasn't changed - reuse existing ID and preserve its matrix data
                 existing_id = existing_role_map[sig]
                 existing_obj = OrganizationRoles.query.get(existing_id)
-                # Update training cluster if not set
-                if not existing_obj.training_program_cluster_id and training_program_cluster_id:
-                    existing_obj.training_program_cluster_id = training_program_cluster_id
-                    db.session.flush()
                 saved_roles.append(existing_obj.to_dict())
                 current_app.logger.info(
                     f"[ROLE SAVE] Keeping unchanged role '{role_name}' (ID: {existing_id}) - matrix preserved"
                 )
             else:
                 # This is a new role (or full reset) - create it
+                # NOTE: training_program_cluster_id is assigned in Phase 2, not here
                 new_role = OrganizationRoles(
                     organization_id=org_id,
                     role_name=role_name,
                     role_description=role_description,
                     standard_role_cluster_id=standard_role_cluster_id,
-                    training_program_cluster_id=training_program_cluster_id,
                     identification_method=role_identification_method,
                     participating_in_training=participating
                 )
@@ -366,7 +341,7 @@ def save_roles():
 
                 current_app.logger.info(
                     f"[ROLE SAVE] {'Added' if smart_merge_enabled else 'Created'} role '{role_name}' (ID: {new_role.id}) "
-                    f"for org {org_id} (SE cluster: {standard_role_cluster_id}, Training cluster: {training_program_cluster_id})"
+                    f"for org {org_id} (SE cluster: {standard_role_cluster_id})"
                 )
 
         # Also save to PhaseQuestionnaireResponse for backward compatibility
@@ -773,13 +748,13 @@ def find_processes():
                         involvement = llm_process_map.get(process_name, "Not performing")
 
                         # Map involvement to numeric value
-                        # CRITICAL: These values multiply with process_competency_value (1,2,3)
+                        # CRITICAL: These values multiply with process_competency_value (0,1,2)
                         # Valid results must match stored procedure CASE: {0,1,2,3,4,6}
-                        # Designing(3) * Apply(3) = 9 is not handled, but Designing(3) * Understand(2) = 6 is valid
+                        # Designing(3) * Understand(2) = 6 -> beherrschen (master level)
                         involvement_values = {
                             "Responsible": 2,
                             "Supporting": 1,
-                            "Designing": 4,  # FIXED: Must be 4 to match database CHECK constraint
+                            "Designing": 3,  # Must be 3 to match Derik's implementation
                             "Not performing": 0
                         }
                         role_process_value = involvement_values.get(involvement, 0)
@@ -943,7 +918,7 @@ def find_processes():
                     involvement_values = {
                         "Responsible": 2,
                         "Supporting": 1,
-                        "Designing": 4,
+                        "Designing": 3,  # Must be 3 to match Derik's implementation
                         "Not performing": 0
                     }
                     role_process_value = involvement_values.get(involvement, 0)
@@ -1887,7 +1862,7 @@ def update_process_selection():
         involvement_values = {
             "Responsible": 2,
             "Supporting": 1,
-            "Designing": 4,
+            "Designing": 3,  # Must be 3 to match Derik's implementation
             "Not performing": 0
         }
 

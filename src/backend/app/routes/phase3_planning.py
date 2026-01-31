@@ -727,11 +727,11 @@ def export_phase3_excel(organization_id):
 
         # Table headers
         if is_role_clustered:
-            headers = ['Training Program', 'Module Type', 'Training Module', 'Level', 'Learning Format', 'Est. Participants']
-            col_widths = [22, 18, 40, 15, 18, 16]
+            headers = ['Training Program', 'Module Type', 'Training Module', 'Level', 'Learning Format', 'Roles', 'Est. Participants']
+            col_widths = [20, 14, 32, 14, 28, 45, 14]
         else:
-            headers = ['Training Module', 'Level', 'Learning Format', 'Est. Participants']
-            col_widths = [50, 15, 20, 18]
+            headers = ['Training Module', 'Level', 'Learning Format', 'Roles', 'Est. Participants']
+            col_widths = [35, 14, 30, 50, 14]
 
         for col_idx, header in enumerate(headers, 1):
             cell = ws.cell(row=row, column=col_idx, value=header)
@@ -787,6 +787,13 @@ def export_phase3_excel(organization_id):
                     common_base = [m for m in cluster_modules if m.get('subcluster') == 'common']
                     role_specific = [m for m in cluster_modules if m.get('subcluster') != 'common']
 
+                    # Helper to format roles list
+                    def format_roles(module):
+                        roles = module.get('pathway_roles') or module.get('roles_needing_training', [])
+                        if roles and isinstance(roles, list):
+                            return ', '.join(roles)
+                        return ''
+
                     # Write Common Base modules first
                     for module in common_base:
                         level_num = module.get('target_level', 0)
@@ -805,8 +812,9 @@ def export_phase3_excel(organization_id):
                         elif not format_name:
                             format_name = 'Not Selected'
 
+                        roles_str = format_roles(module)
                         values = [cluster_display, 'Common Base', module_name, level_name, format_name,
-                                  module.get('estimated_participants', 0)]
+                                  roles_str, module.get('estimated_participants', 0)]
                         for col_idx, value in enumerate(values, 1):
                             cell = ws.cell(row=row, column=col_idx, value=value)
                             cell.border = THIN_BORDER
@@ -815,8 +823,10 @@ def export_phase3_excel(organization_id):
                                 cell.font = CLUSTER_FONT
                             if col_idx == 2:
                                 cell.fill = COMMON_BASE_FILL
-                            if col_idx in [4, 6]:
+                            if col_idx in [4, 7]:
                                 cell.alignment = Alignment(horizontal='center')
+                            if col_idx == 6:  # Roles column - wrap text
+                                cell.alignment = Alignment(wrap_text=True)
                         row += 1
 
                     # Write Role-Specific modules
@@ -827,13 +837,6 @@ def export_phase3_excel(organization_id):
                             module.get('competency_name', ''),
                             module.get('pmt_type', '')
                         )
-                        # Include role info if available (pathway_roles from subcluster logic)
-                        pathway_roles = module.get('pathway_roles') or module.get('roles_needing_training', [])
-                        if pathway_roles and isinstance(pathway_roles, list):
-                            role_info = ', '.join(pathway_roles[:2])  # Limit to first 2 roles
-                            if len(pathway_roles) > 2:
-                                role_info += f' +{len(pathway_roles)-2} more'
-                            module_name = f"{module_name} ({role_info})"
 
                         format_name = module.get('format_name', '')
                         if not format_name and module.get('selected_format_id'):
@@ -845,8 +848,9 @@ def export_phase3_excel(organization_id):
                         elif not format_name:
                             format_name = 'Not Selected'
 
+                        roles_str = format_roles(module)
                         values = [cluster_display, 'Role-Specific', module_name, level_name, format_name,
-                                  module.get('estimated_participants', 0)]
+                                  roles_str, module.get('estimated_participants', 0)]
                         for col_idx, value in enumerate(values, 1):
                             cell = ws.cell(row=row, column=col_idx, value=value)
                             cell.border = THIN_BORDER
@@ -855,11 +859,19 @@ def export_phase3_excel(organization_id):
                                 cell.font = CLUSTER_FONT
                             if col_idx == 2:
                                 cell.fill = ROLE_SPECIFIC_FILL
-                            if col_idx in [4, 6]:
+                            if col_idx in [4, 7]:
                                 cell.alignment = Alignment(horizontal='center')
+                            if col_idx == 6:  # Roles column - wrap text
+                                cell.alignment = Alignment(wrap_text=True)
                         row += 1
                 else:
                     # For Managers and Interfacing Partners - no Common Base distinction
+                    def format_roles(module):
+                        roles = module.get('pathway_roles') or module.get('roles_needing_training', [])
+                        if roles and isinstance(roles, list):
+                            return ', '.join(roles)
+                        return ''
+
                     for module in cluster_modules:
                         level_num = module.get('target_level', 0)
                         level_name = LEVEL_NAMES.get(level_num, f'Level {level_num}')
@@ -877,16 +889,19 @@ def export_phase3_excel(organization_id):
                         elif not format_name:
                             format_name = 'Not Selected'
 
+                        roles_str = format_roles(module)
                         values = [cluster_display, '-', module_name, level_name, format_name,
-                                  module.get('estimated_participants', 0)]
+                                  roles_str, module.get('estimated_participants', 0)]
                         for col_idx, value in enumerate(values, 1):
                             cell = ws.cell(row=row, column=col_idx, value=value)
                             cell.border = THIN_BORDER
                             if col_idx == 1:
                                 cell.fill = CLUSTER_FILL
                                 cell.font = CLUSTER_FONT
-                            if col_idx in [4, 6]:
+                            if col_idx in [4, 7]:
                                 cell.alignment = Alignment(horizontal='center')
+                            if col_idx == 6:  # Roles column - wrap text
+                                cell.alignment = Alignment(wrap_text=True)
                         row += 1
 
                 # Merge cluster cells if multiple modules
@@ -917,18 +932,25 @@ def export_phase3_excel(organization_id):
                 elif not format_name:
                     format_name = 'Not Selected'
 
+                # Get roles
+                roles = module.get('roles_needing_training', [])
+                roles_str = ', '.join(roles) if roles and isinstance(roles, list) else ''
+
                 values = [
                     module_name,
                     level_name,
                     format_name,
+                    roles_str,
                     module.get('estimated_participants', 0)
                 ]
 
                 for col_idx, value in enumerate(values, 1):
                     cell = ws.cell(row=row, column=col_idx, value=value)
                     cell.border = THIN_BORDER
-                    if col_idx in [2, 4]:  # Center align level, participants
+                    if col_idx in [2, 5]:  # Center align level, participants
                         cell.alignment = Alignment(horizontal='center')
+                    if col_idx == 4:  # Roles column - wrap text
+                        cell.alignment = Alignment(wrap_text=True)
 
                 row += 1
 
@@ -943,7 +965,7 @@ def export_phase3_excel(organization_id):
 
             # Timeline headers
             timeline_headers = ['#', 'Milestone', 'Date', 'Quarter', 'Description']
-            timeline_widths = [5, 30, 15, 12, 50]
+            timeline_widths = [5, 30, 15, 12, 70]
 
             for col_idx, header in enumerate(timeline_headers, 1):
                 cell = ws.cell(row=row, column=col_idx, value=header)

@@ -85,10 +85,10 @@
           </div>
           <div class="level-legend">
             <span class="legend-label">Levels:</span>
-            <span class="legend-item"><span class="level-badge">Knowing</span></span>
-            <span class="legend-item"><span class="level-badge">Understanding</span></span>
-            <span class="legend-item"><span class="level-badge">Applying</span></span>
-            <span class="legend-item"><span class="level-badge">Mastering</span></span>
+            <span class="legend-item"><span class="level-badge l1">Knowing</span></span>
+            <span class="legend-item"><span class="level-badge l2">Understanding</span></span>
+            <span class="legend-item"><span class="level-badge l4">Applying</span></span>
+            <span class="legend-item"><span class="level-badge l6">Mastering</span></span>
           </div>
         </div>
 
@@ -119,7 +119,7 @@
                   {{ group.confirmedCount }}/{{ group.modules.length }} confirmed
                 </el-tag>
                 <div class="level-badges">
-                  <span v-for="level in group.levels" :key="level" class="level-badge">
+                  <span v-for="level in group.levels" :key="level" class="level-badge" :class="`l${level}`">
                     {{ getLevelName(level) }}
                   </span>
                 </div>
@@ -321,7 +321,7 @@
                         <span class="pathway-competency-name">{{ compGroup.competency_name }}</span>
                         <div class="pathway-meta">
                           <span class="level-badges">
-                            <span v-for="level in compGroup.levels" :key="level" class="level-badge small">{{ getLevelName(level) }}</span>
+                            <span v-for="level in compGroup.levels" :key="level" class="level-badge small" :class="`l${level}`">{{ getLevelName(level) }}</span>
                           </span>
                           <el-tag size="small" :type="compGroup.confirmedCount === compGroup.modules.length ? 'success' : 'info'">
                             {{ compGroup.confirmedCount }}/{{ compGroup.modules.length }}
@@ -416,7 +416,7 @@
                     </div>
                     <div class="nested-meta">
                       <span class="level-badges">
-                        <span v-for="level in compGroup.levels" :key="level" class="level-badge">{{ getLevelName(level) }}</span>
+                        <span v-for="level in compGroup.levels" :key="level" class="level-badge" :class="`l${level}`">{{ getLevelName(level) }}</span>
                       </span>
                       <el-tag
                         size="small"
@@ -1163,6 +1163,12 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 600;
 }
+
+/* Level-specific colors */
+.level-badge.l1 { background: #909399; }  /* Knowing - Gray */
+.level-badge.l2 { background: #E6A23C; }  /* Understanding - Orange */
+.level-badge.l4 { background: #409EFF; }  /* Applying - Blue */
+.level-badge.l6 { background: #67C23A; }  /* Mastering - Green */
 
 .competency-modules {
   border-top: 1px solid #EBEEF5;
