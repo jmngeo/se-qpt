@@ -251,6 +251,8 @@ class Phase3PlanningService:
         # Get existing format selections (include cluster_id for role_clustered)
         existing_selections = self._get_existing_selections(organization_id, view_type)
 
+        self._level1_modules_removed = 0  # Reset before extraction
+
         if view_type == 'role_clustered':
             # Get role to cluster mapping
             role_cluster_map = self._get_role_cluster_map(organization_id)
@@ -271,12 +273,19 @@ class Phase3PlanningService:
                 existing_selections
             )
 
-        return {
+        result = {
             'modules': modules,
             'scaling_info': org_info,
             'total_modules': len(modules),
             'configured_modules': sum(1 for m in modules if m.get('selected_format_id'))
         }
+
+        # Add Level 1 consolidation metadata for role-clustered view
+        if view_type == 'role_clustered' and self._level1_modules_removed > 0:
+            result['level1_consolidated'] = True
+            result['level1_modules_removed'] = self._level1_modules_removed
+
+        return result
 
     def _get_organization_scaling_info(self, organization_id: int) -> Dict[str, Any]:
         """Get participant scaling information for an organization"""
@@ -736,6 +745,23 @@ class Phase3PlanningService:
                                 module_data['pathway_roles'] = pathway_roles
 
                         modules.append(module_data)
+
+        # --- Level 1 Consolidation for Role-Clustered View ---
+        # Skip Level 1 (Knowing) modules when Level 2+ exists for the same competency+cluster.
+        # Achieving Level 2+ automatically covers Level 1 knowledge, so a separate
+        # Knowing-level training module is redundant.
+        competencies_with_higher_levels = set()
+        for m in modules:
+            if m['target_level'] >= 2:
+                competencies_with_higher_levels.add((m['competency_id'], m['cluster_id']))
+
+        original_count = len(modules)
+        modules = [
+            m for m in modules
+            if not (m['target_level'] == 1
+                    and (m['competency_id'], m['cluster_id']) in competencies_with_higher_levels)
+        ]
+        self._level1_modules_removed = original_count - len(modules)
 
         return modules
 

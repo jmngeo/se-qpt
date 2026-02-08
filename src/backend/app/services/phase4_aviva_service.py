@@ -34,21 +34,21 @@ class Phase4AvivaService:
 
     # Duration in hours per level
     LEVEL_DURATION_HOURS = {
-        1: 2,
-        2: 4,
-        4: 8,
-        6: 16
+        1: 1,
+        2: 2,
+        4: 4,
+        6: 8
     }
 
-    # AVIVA phase durations in minutes (defaults)
+    # AVIVA phase durations in minutes (defaults and allowed ranges)
     AVIVA_PHASE_DURATIONS = {
         'A_arrive': {'default': 10, 'range': (5, 15)},
-        'V_activate': {'default': 20, 'range': (15, 30)},
-        'I_inform': {'default': 30, 'range': (20, 45)},
-        'V_process': {'default': 45, 'range': (30, 60)},
-        'A_evaluate': {'default': 15, 'range': (10, 20)},
-        'P_break': {'default': 15, 'range': (10, 15)},
-        'P_lunch': {'default': 60, 'range': (45, 60)}
+        'V_activate': {'default': 15, 'range': (10, 25)},
+        'I_inform': {'default': 25, 'range': (20, 35)},
+        'V_process': {'default': 30, 'range': (15, 45)},
+        'A_evaluate': {'default': 10, 'range': (10, 20)},
+        'P_break': {'default': 10, 'range': (10, 15)},
+        'P_lunch': {'default': 50, 'range': (45, 50)}
     }
 
     # AVIVA phase to Type mapping
@@ -149,6 +149,38 @@ class Phase4AvivaService:
         minutes = total_minutes % 60
         return f"{hours:02d}:{minutes:02d}"
 
+    def _get_business_day(self, start_date, day_offset: int):
+        """Return the Nth business day from start_date, skipping weekends (Sat/Sun).
+
+        Args:
+            start_date: datetime.date or datetime.datetime
+            day_offset: 0-based offset (0 = start_date itself if it's a weekday)
+
+        Returns:
+            datetime.date
+        """
+        from datetime import date as date_type
+        if hasattr(start_date, 'date'):
+            current = start_date.date()
+        elif isinstance(start_date, date_type):
+            current = start_date
+        else:
+            # Try parsing string
+            current = datetime.strptime(str(start_date), '%Y-%m-%d').date()
+
+        # Advance to first weekday if start_date is on a weekend
+        while current.weekday() >= 5:  # 5=Sat, 6=Sun
+            current += timedelta(days=1)
+
+        # Now advance day_offset business days
+        days_added = 0
+        while days_added < day_offset:
+            current += timedelta(days=1)
+            if current.weekday() < 5:
+                days_added += 1
+
+        return current
+
     def _get_format_key(self, format_name: str) -> str:
         """Convert format name to key for mapping lookup"""
         if not format_name:
@@ -193,94 +225,70 @@ class Phase4AvivaService:
         """
         activities = []
 
-        # Level 1: 2 hours (120 min) - Simple sequence
+        # Level 1: 1 hour (60 min) - Compact single-cycle sequence
+        # A(5) + V(10) + I(20) + V(15) + A(10) = 60 min
         if level == 1:
             activities = [
-                {'aviva_phase': 'A', 'phase_type': 'arrive', 'duration': 10, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 20, 'type': 'U'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 30, 'type': 'V'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 30, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 25, 'type': 'U'},
+                {'aviva_phase': 'A', 'phase_type': 'arrive', 'duration': 5, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 10, 'type': 'U'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 20, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 15, 'type': 'U'},
                 {'aviva_phase': 'A', 'phase_type': 'evaluate', 'duration': 10, 'type': 'V'},
             ]
-            # Add break if there's time
-            if total_minutes >= 135:
-                activities.insert(3, {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'})
 
-        # Level 2: 4 hours (240 min) - Extended sequence
+        # Level 2: 2 hours (120 min) - Two I-V cycles with break
+        # A(5) + V(10) + I(25) + V(20) + P(10) + I(20) + V(20) + A(10) = 120 min
         elif level == 2:
             activities = [
+                {'aviva_phase': 'A', 'phase_type': 'arrive', 'duration': 5, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 10, 'type': 'U'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 25, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 20, 'type': 'U'},
+                {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 10, 'type': 'P'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 20, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 20, 'type': 'U'},
+                {'aviva_phase': 'A', 'phase_type': 'evaluate', 'duration': 10, 'type': 'V'},
+            ]
+
+        # Level 4: 4 hours (240 min) - Half-day workshop, 3 practice rounds, no lunch
+        # A(10) + V(15) + I(20) + I(20) + V(30) + P(15) + I(20) + V(35) + P(10) + I(20) + V(30) + A(15) = 240 min
+        elif level == 4:
+            activities = [
                 {'aviva_phase': 'A', 'phase_type': 'arrive', 'duration': 10, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 20, 'type': 'U'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 30, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 40, 'type': 'U'},
+                {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 15, 'type': 'U'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 20, 'type': 'V'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 20, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 30, 'type': 'U'},
                 {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 40, 'type': 'U'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 20, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 35, 'type': 'U'},
+                {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 10, 'type': 'P'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 20, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 30, 'type': 'U'},
                 {'aviva_phase': 'A', 'phase_type': 'evaluate', 'duration': 15, 'type': 'V'},
             ]
 
-        # Level 4: 8 hours (480 min) - Full day with lunch
-        elif level == 4:
+        # Level 6: 8 hours (480 min) - Full day with lunch, 4 practice rounds
+        # A(15) + V(25) + I(35) + I(30) + V(45) + P(15) + I(30) + V(40) + P(50) + V(15) + I(30) + V(40) + P(15) + I(30) + V(45) + A(20) = 480 min
+        elif level == 6:
             activities = [
                 {'aviva_phase': 'A', 'phase_type': 'arrive', 'duration': 15, 'type': 'V'},
                 {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 25, 'type': 'U'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 40, 'type': 'V'},
                 {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 30, 'type': 'V'},
                 {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 45, 'type': 'U'},
                 {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 30, 'type': 'V'},
                 {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 40, 'type': 'U'},
-                {'aviva_phase': 'P', 'phase_type': 'lunch', 'duration': 60, 'type': 'P'},
+                {'aviva_phase': 'P', 'phase_type': 'lunch', 'duration': 50, 'type': 'P'},
                 {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 15, 'type': 'U'},  # Energizer
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 40, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 45, 'type': 'U'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 30, 'type': 'V'},
+                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 40, 'type': 'U'},
                 {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
+                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 30, 'type': 'V'},
                 {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 45, 'type': 'U'},
                 {'aviva_phase': 'A', 'phase_type': 'evaluate', 'duration': 20, 'type': 'V'},
             ]
-
-        # Level 6: 16 hours (2 days) - Two full days
-        elif level == 6:
-            day1 = [
-                {'aviva_phase': 'A', 'phase_type': 'arrive', 'duration': 15, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 25, 'type': 'U'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 40, 'type': 'V'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 45, 'type': 'U'},
-                {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 45, 'type': 'U'},
-                {'aviva_phase': 'P', 'phase_type': 'lunch', 'duration': 60, 'type': 'P'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 40, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 50, 'type': 'U'},
-                {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 50, 'type': 'U'},
-                {'aviva_phase': 'A', 'phase_type': 'evaluate', 'duration': 15, 'type': 'V'},
-            ]
-            day2 = [
-                {'aviva_phase': 'A', 'phase_type': 'arrive', 'duration': 10, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'activate', 'duration': 20, 'type': 'U'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 40, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 50, 'type': 'U'},
-                {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 40, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 45, 'type': 'U'},
-                {'aviva_phase': 'P', 'phase_type': 'lunch', 'duration': 60, 'type': 'P'},
-                {'aviva_phase': 'I', 'phase_type': 'inform', 'duration': 35, 'type': 'V'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 50, 'type': 'U'},
-                {'aviva_phase': 'P', 'phase_type': 'break', 'duration': 15, 'type': 'P'},
-                {'aviva_phase': 'V', 'phase_type': 'process', 'duration': 50, 'type': 'U'},
-                {'aviva_phase': 'A', 'phase_type': 'evaluate', 'duration': 25, 'type': 'V'},
-            ]
-            # Mark day2 activities
-            for act in day2:
-                act['day'] = 2
-            for act in day1:
-                act['day'] = 1
-            activities = day1 + day2
 
         else:
             # Default to level 1 pattern
@@ -491,11 +499,18 @@ class Phase4AvivaService:
         else:
             modules.sort(key=lambda m: (m['competency_name'], m['target_level'], m['pmt_type']))
 
-        return {
+        result = {
             'modules': modules,
             'view_type': view_type,
             'scaling_info': scaling_info
         }
+
+        # Pass through Level 1 consolidation metadata from Phase 3
+        if phase3_result.get('level1_consolidated'):
+            result['level1_consolidated'] = True
+            result['level1_modules_removed'] = phase3_result.get('level1_modules_removed', 0)
+
+        return result
 
     def _get_aviva_plan_status(self, organization_id: int) -> Dict[str, Dict]:
         """Get AVIVA plan status for all modules in the organization.
@@ -991,6 +1006,521 @@ Return ONLY a valid JSON array with content for each row:
         return None
 
     # =========================================================================
+    # TRAINING DELIVERY SCHEDULE
+    # =========================================================================
+
+    DAY_CAPACITY_MINUTES = 480  # 8 hours
+    LUNCH_DURATION_MINUTES = 45
+    LUNCH_THRESHOLD_MINUTES = 300  # 5 hours -> add lunch
+    MERGE_THRESHOLD_MINUTES = 240  # days < 4h eligible for merge
+
+    def _pack_modules_into_days(self, modules: List[Dict], format_label: str) -> List[Dict]:
+        """Greedy first-fit decreasing bin-packing of modules into 8h days.
+
+        Args:
+            modules: List of module dicts, each must have 'duration_minutes'
+            format_label: Label for the format grouping (e.g. 'Seminar Day')
+
+        Returns:
+            List of day dicts with 'modules', 'total_minutes', 'format_label'
+        """
+        if not modules:
+            return []
+
+        # Sort largest-first for better packing
+        sorted_mods = sorted(modules, key=lambda m: m['duration_minutes'], reverse=True)
+
+        days = []
+        for mod in sorted_mods:
+            placed = False
+            for day in days:
+                if day['total_minutes'] + mod['duration_minutes'] <= self.DAY_CAPACITY_MINUTES:
+                    day['modules'].append(mod)
+                    day['total_minutes'] += mod['duration_minutes']
+                    placed = True
+                    break
+            if not placed:
+                days.append({
+                    'modules': [mod],
+                    'total_minutes': mod['duration_minutes'],
+                    'format_label': format_label,
+                })
+
+        return days
+
+    def _generate_daily_schedule(
+        self,
+        aviva_plans: List[Dict[str, Any]],
+        view_type: str,
+        milestones: List[Dict]
+    ) -> Dict[str, Any]:
+        """Main orchestrator: groups modules, packs into days, assigns dates.
+
+        Args:
+            aviva_plans: Sorted list of AVIVA plan dicts (same as used for export)
+            view_type: 'competency_level' or 'role_clustered'
+            milestones: Phase 3 timeline milestones list
+
+        Returns:
+            Schedule data dict with sections, days, totals
+        """
+        from itertools import groupby
+
+        # --- Extract rollout dates from milestones ---
+        rollout_start = None
+        rollout_end = None
+        for ms in (milestones or []):
+            order = ms.get('order', ms.get('milestone_order'))
+            date_str = ms.get('estimated_date', '')
+            if order == 4 and date_str:  # Rollout Start
+                try:
+                    rollout_start = datetime.strptime(date_str, '%Y-%m-%d').date()
+                except (ValueError, TypeError):
+                    pass
+            elif order == 5 and date_str:  # Rollout End
+                try:
+                    rollout_end = datetime.strptime(date_str, '%Y-%m-%d').date()
+                except (ValueError, TypeError):
+                    pass
+
+        has_calendar_dates = rollout_start is not None
+
+        # --- Build flat module list with scheduling metadata ---
+        def build_schedule_module(plan):
+            duration_min = plan.get('total_duration_minutes', 0)
+            level = plan.get('target_level', 0)
+            return {
+                'module_name': plan.get('module_name', ''),
+                'competency_name': plan.get('competency_name', ''),
+                'target_level': level,
+                'level_name': self._get_level_name(level),
+                'learning_format': plan.get('learning_format', ''),
+                'duration_minutes': duration_min,
+                'duration_hours': round(duration_min / 60, 1),
+                'cluster_name': plan.get('cluster_name'),
+                'subcluster': plan.get('subcluster'),
+                'pmt_type': plan.get('pmt_type', ''),
+                'estimated_participants': plan.get('estimated_participants', 0),
+                'roles_needing_training': plan.get('roles_needing_training', []),
+                'has_internal_lunch': level == 6,  # L6 modules are full-day with built-in lunch
+            }
+
+        # --- Section grouping ---
+        if view_type == 'role_clustered':
+            cluster_order = {'SE for Engineers': 0, 'SE for Managers': 1, 'SE for Interfacing Partners': 2}
+            sections_raw = {}
+            for plan in aviva_plans:
+                cname = plan.get('cluster_name', 'Uncategorized')
+                if cname not in sections_raw:
+                    sections_raw[cname] = []
+                sections_raw[cname].append(build_schedule_module(plan))
+            # Sort sections by cluster order
+            section_list = sorted(sections_raw.items(), key=lambda x: cluster_order.get(x[0], 99))
+        else:
+            # Single section for competency-level view
+            all_mods = [build_schedule_module(p) for p in aviva_plans]
+            section_list = [('All Modules', all_mods)]
+
+        # --- Pack each section ---
+        schedule_sections = []
+        running_day_offset = 0  # For sequential calendar date assignment across packages
+
+        for section_name, section_modules in section_list:
+            if not section_modules:
+                continue
+
+            # Sub-group by learning format (G2)
+            def format_sort_key(m):
+                return m.get('learning_format', '') or ''
+
+            sorted_by_format = sorted(section_modules, key=format_sort_key)
+            format_groups = {}
+            for fmt, grp_iter in groupby(sorted_by_format, key=format_sort_key):
+                grp = list(grp_iter)
+                # Derive a day label from the format
+                fmt_lower = (fmt or '').lower()
+                if 'seminar' in fmt_lower:
+                    day_label = 'Seminar Day'
+                elif 'webinar' in fmt_lower:
+                    day_label = 'Webinar Day'
+                elif 'coaching' in fmt_lower:
+                    day_label = 'Coaching Day'
+                elif 'wbt' in fmt_lower or 'web-based' in fmt_lower:
+                    day_label = 'WBT Day'
+                elif 'blended' in fmt_lower:
+                    day_label = 'Blended Day'
+                else:
+                    day_label = 'Training Day'
+                format_groups[fmt] = {'modules': grp, 'day_label': day_label}
+
+            # Pack each format group
+            all_days = []
+            for fmt, fg in format_groups.items():
+                packed = self._pack_modules_into_days(fg['modules'], fg['day_label'])
+                all_days.extend(packed)
+
+            # Merge under-filled days (< 4h) across format groups
+            under_filled = [d for d in all_days if d['total_minutes'] < self.MERGE_THRESHOLD_MINUTES]
+            full_days = [d for d in all_days if d['total_minutes'] >= self.MERGE_THRESHOLD_MINUTES]
+
+            merged_days = []
+            while under_filled:
+                day = under_filled.pop(0)
+                merged = True
+                while merged and under_filled:
+                    merged = False
+                    for i, candidate in enumerate(under_filled):
+                        if day['total_minutes'] + candidate['total_minutes'] <= self.DAY_CAPACITY_MINUTES:
+                            day['modules'].extend(candidate['modules'])
+                            day['total_minutes'] += candidate['total_minutes']
+                            day['format_label'] = 'Mixed'
+                            under_filled.pop(i)
+                            merged = True
+                            break
+                merged_days.append(day)
+
+            all_days = full_days + merged_days
+
+            # Sort days: full days first (by total_minutes desc), then merged
+            all_days.sort(key=lambda d: d['total_minutes'], reverse=True)
+
+            # Assign day numbers and calendar dates, compute per-module times
+            section_days = []
+            for day_idx, day in enumerate(all_days):
+                day_number = day_idx + 1
+
+                # Calendar date
+                cal_date = None
+                day_of_week = None
+                if has_calendar_dates:
+                    cal_date = self._get_business_day(rollout_start, running_day_offset + day_idx)
+                    day_of_week = cal_date.strftime('%A')
+
+                # Compute per-module start/end times within the day
+                current_minutes = 0
+                needs_lunch = False
+                total_teaching = day['total_minutes']
+
+                # Determine if lunch needed: multi-module days >= 5h without an L6 module
+                has_l6 = any(m.get('has_internal_lunch') for m in day['modules'])
+                if total_teaching >= self.LUNCH_THRESHOLD_MINUTES and not has_l6 and len(day['modules']) > 1:
+                    needs_lunch = True
+
+                day_modules = []
+                lunch_inserted = False
+                for mod in day['modules']:
+                    # Insert lunch if needed around 12:00 (180 min from 9:00)
+                    if needs_lunch and not lunch_inserted and current_minutes >= 180:
+                        lunch_inserted = True
+                        # We don't add lunch to total_minutes of day - it's annotation only
+
+                    start_time = self._minutes_to_time(current_minutes, 9)
+                    current_minutes += mod['duration_minutes']
+                    end_time = self._minutes_to_time(current_minutes, 9)
+
+                    day_modules.append({
+                        'module_name': mod['module_name'],
+                        'competency_name': mod.get('competency_name', ''),
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'duration_hours': mod['duration_hours'],
+                        'duration_minutes': mod['duration_minutes'],
+                        'target_level': mod['target_level'],
+                        'level_name': mod['level_name'],
+                        'learning_format': mod['learning_format'],
+                        'pmt_type': mod.get('pmt_type', ''),
+                        'estimated_participants': mod.get('estimated_participants', 0),
+                        'has_internal_lunch': mod.get('has_internal_lunch', False),
+                    })
+
+                section_days.append({
+                    'day_number': day_number,
+                    'calendar_date': cal_date.isoformat() if cal_date else None,
+                    'day_of_week': day_of_week,
+                    'format_label': day['format_label'],
+                    'total_minutes': day['total_minutes'],
+                    'total_hours': round(day['total_minutes'] / 60, 1),
+                    'needs_lunch': needs_lunch,
+                    'modules': day_modules,
+                })
+
+            total_section_days = len(section_days)
+            total_section_hours = round(sum(d['total_minutes'] for d in section_days) / 60, 1)
+
+            schedule_sections.append({
+                'section_name': section_name,
+                'total_days': total_section_days,
+                'total_hours': total_section_hours,
+                'days': section_days,
+            })
+
+            # Advance running offset for next package (G3 sequential scheduling)
+            running_day_offset += total_section_days
+
+        grand_total_days = sum(s['total_days'] for s in schedule_sections)
+        grand_total_hours = round(sum(s['total_hours'] for s in schedule_sections), 1)
+
+        # Determine schedule period display
+        schedule_period = None
+        if has_calendar_dates and grand_total_days > 0:
+            first_date = schedule_sections[0]['days'][0]['calendar_date'] if schedule_sections and schedule_sections[0]['days'] else None
+            last_section = schedule_sections[-1] if schedule_sections else None
+            last_date = last_section['days'][-1]['calendar_date'] if last_section and last_section['days'] else None
+            if first_date and last_date:
+                schedule_period = f"{first_date} to {last_date}"
+
+        return {
+            'schedule_sections': schedule_sections,
+            'grand_total_days': grand_total_days,
+            'grand_total_hours': grand_total_hours,
+            'has_calendar_dates': has_calendar_dates,
+            'schedule_period': schedule_period,
+            'rollout_start': rollout_start.isoformat() if rollout_start else None,
+            'rollout_end': rollout_end.isoformat() if rollout_end else None,
+        }
+
+    def _write_schedule_sheet(self, ws, schedule_data: Dict[str, Any], view_type: str, milestones=None):
+        """Write the Training Delivery Schedule Excel sheet.
+
+        Args:
+            ws: openpyxl worksheet
+            schedule_data: Output from _generate_daily_schedule()
+            view_type: 'competency_level' or 'role_clustered'
+            milestones: Optional list of timeline milestone dicts
+        """
+        from openpyxl.utils import get_column_letter
+
+        # Styles
+        TITLE_FONT = Font(size=16, bold=True)
+        SUBTITLE_FONT = Font(size=11, bold=True)
+        LABEL_FONT = Font(bold=True)
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="455A64", end_color="455A64", fill_type="solid")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        DAY_HEADER_FILL = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+        DAY_HEADER_FONT = Font(bold=True, size=10)
+        LUNCH_FONT = Font(italic=True, color="888888")
+        TOTAL_FONT = Font(bold=True, italic=True)
+
+        PKG_FILLS = {
+            'SE for Engineers': PatternFill(start_color='D6E4F0', end_color='D6E4F0', fill_type='solid'),
+            'SE for Managers': PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid'),
+            'SE for Interfacing Partners': PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid'),
+        }
+        PKG_HEADER_FONT = Font(bold=True, size=11)
+
+        # Column layout
+        col_headers = ['Day #', 'Date', 'Time', 'Module', 'Level', 'Format', 'Duration']
+        col_widths = [7, 16, 14, 45, 14, 28, 11]
+        num_cols = len(col_headers)
+
+        # Set column widths
+        for i, w in enumerate(col_widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+        row = 1
+
+        # ===== TITLE =====
+        ws.merge_cells(f'A1:{get_column_letter(num_cols)}1')
+        ws['A1'] = 'Training Delivery Schedule'
+        ws['A1'].font = TITLE_FONT
+        ws['A1'].alignment = Alignment(horizontal='center')
+        row = 3
+
+        # ===== SUMMARY =====
+        grand_days = schedule_data.get('grand_total_days', 0)
+        grand_hours = schedule_data.get('grand_total_hours', 0)
+        has_dates = schedule_data.get('has_calendar_dates', False)
+        period = schedule_data.get('schedule_period')
+
+        ws[f'A{row}'] = 'Total Training Days:'
+        ws[f'A{row}'].font = LABEL_FONT
+        ws[f'B{row}'] = grand_days
+        row += 1
+
+        ws[f'A{row}'] = 'Total Training Hours:'
+        ws[f'A{row}'].font = LABEL_FONT
+        hours_display = f"{grand_hours}h"
+        if grand_hours >= 8:
+            hours_display += f" (~{grand_hours / 8:.1f} training days)"
+        ws[f'B{row}'] = hours_display
+        ws.merge_cells(f'B{row}:D{row}')
+        row += 1
+
+        ws[f'A{row}'] = 'Schedule Period:'
+        ws[f'A{row}'].font = LABEL_FONT
+        ws[f'B{row}'] = period if period else 'Dates not yet determined'
+        ws.merge_cells(f'B{row}:D{row}')
+        row += 2
+
+        # ===== PER-SECTION BLOCKS =====
+        for section in schedule_data.get('schedule_sections', []):
+            section_name = section['section_name']
+            section_days = section['total_days']
+            section_hours = section['total_hours']
+
+            # Section header
+            pkg_fill = PKG_FILLS.get(section_name, PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid'))
+            ws.merge_cells(f'A{row}:{get_column_letter(num_cols)}{row}')
+            cell = ws[f'A{row}']
+            cell.value = f"{section_name} - Training Schedule"
+            cell.font = PKG_HEADER_FONT
+            cell.fill = pkg_fill
+            cell.alignment = Alignment(vertical='center')
+            row += 1
+
+            # Section summary
+            ws[f'A{row}'] = f"{section_days} training day{'s' if section_days != 1 else ''} | {section_hours}h total"
+            ws[f'A{row}'].font = Font(italic=True, size=9, color='606266')
+            ws.merge_cells(f'A{row}:{get_column_letter(num_cols)}{row}')
+            row += 1
+
+            # Column headers
+            for col, header in enumerate(col_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            row += 1
+
+            # Days
+            for day in section.get('days', []):
+                day_num = day['day_number']
+                cal_date = day.get('calendar_date', '')
+                day_of_week = day.get('day_of_week', '')
+                fmt_label = day.get('format_label', 'Training Day')
+                total_h = day.get('total_hours', 0)
+
+                # Day header row
+                if cal_date and day_of_week:
+                    day_header = f"Day {day_num} -- {day_of_week[:3]}, {cal_date} | {fmt_label} | {total_h}h"
+                else:
+                    day_header = f"Day {day_num} | {fmt_label} | {total_h}h"
+
+                ws.merge_cells(f'A{row}:{get_column_letter(num_cols)}{row}')
+                cell = ws[f'A{row}']
+                cell.value = day_header
+                cell.fill = DAY_HEADER_FILL
+                cell.font = DAY_HEADER_FONT
+                row += 1
+
+                # Module rows
+                needs_lunch = day.get('needs_lunch', False)
+                lunch_inserted = False
+
+                for mod in day.get('modules', []):
+                    start_t = mod.get('start_time', '')
+                    end_t = mod.get('end_time', '')
+
+                    # Insert lunch annotation before this module if needed
+                    if needs_lunch and not lunch_inserted:
+                        # Parse start minutes to check if we're past 12:00 (180 min)
+                        try:
+                            parts = start_t.split(':')
+                            start_min = (int(parts[0]) - 9) * 60 + int(parts[1])
+                        except (ValueError, IndexError):
+                            start_min = 0
+                        if start_min >= 180:
+                            lunch_inserted = True
+                            ws.cell(row=row, column=1, value='').border = thin_border
+                            date_display = cal_date if cal_date else ''
+                            ws.cell(row=row, column=2, value=date_display).border = thin_border
+                            ws.cell(row=row, column=3, value='12:00 - 12:45').border = thin_border
+                            lunch_cell = ws.cell(row=row, column=4, value='Lunch Break')
+                            lunch_cell.border = thin_border
+                            lunch_cell.font = LUNCH_FONT
+                            ws.cell(row=row, column=5, value='').border = thin_border
+                            ws.cell(row=row, column=6, value='').border = thin_border
+                            ws.cell(row=row, column=7, value='45 min').border = thin_border
+                            for c in range(1, num_cols + 1):
+                                ws.cell(row=row, column=c).alignment = Alignment(horizontal='center')
+                            ws.cell(row=row, column=4).alignment = Alignment(horizontal='left')
+                            row += 1
+
+                    # Module data row
+                    date_display = cal_date if cal_date else ''
+                    level_display = f"L{mod['target_level']} {mod['level_name']}"
+
+                    ws.cell(row=row, column=1, value=f"Day {day_num}").border = thin_border
+                    ws.cell(row=row, column=2, value=date_display).border = thin_border
+                    ws.cell(row=row, column=3, value=f"{start_t} - {end_t}").border = thin_border
+                    ws.cell(row=row, column=4, value=mod['module_name']).border = thin_border
+                    ws.cell(row=row, column=5, value=level_display).border = thin_border
+                    ws.cell(row=row, column=6, value=mod.get('learning_format', '')).border = thin_border
+                    ws.cell(row=row, column=7, value=f"{mod['duration_hours']}h").border = thin_border
+
+                    # Alignment
+                    for c in [1, 2, 3, 5, 7]:
+                        ws.cell(row=row, column=c).alignment = Alignment(horizontal='center')
+
+                    row += 1
+
+                # Insert lunch at end if still needed and not yet inserted
+                if needs_lunch and not lunch_inserted:
+                    lunch_inserted = True
+                    ws.cell(row=row, column=1, value='').border = thin_border
+                    ws.cell(row=row, column=2, value=cal_date if cal_date else '').border = thin_border
+                    ws.cell(row=row, column=3, value='12:00 - 12:45').border = thin_border
+                    lunch_cell = ws.cell(row=row, column=4, value='Lunch Break')
+                    lunch_cell.border = thin_border
+                    lunch_cell.font = LUNCH_FONT
+                    ws.cell(row=row, column=5, value='').border = thin_border
+                    ws.cell(row=row, column=6, value='').border = thin_border
+                    ws.cell(row=row, column=7, value='45 min').border = thin_border
+                    for c in range(1, num_cols + 1):
+                        ws.cell(row=row, column=c).alignment = Alignment(horizontal='center')
+                    ws.cell(row=row, column=4).alignment = Alignment(horizontal='left')
+                    row += 1
+
+            # Section total
+            ws.merge_cells(f'A{row}:{get_column_letter(num_cols)}{row}')
+            ws[f'A{row}'] = f"Total: {section_days} day{'s' if section_days != 1 else ''}, {section_hours}h"
+            ws[f'A{row}'].font = TOTAL_FONT
+            ws[f'A{row}'].alignment = Alignment(horizontal='right')
+            row += 2
+
+        # ===== IMPLEMENTATION TIMELINE =====
+        if milestones:
+            ws.merge_cells(f'A{row}:{get_column_letter(num_cols)}{row}')
+            ws[f'A{row}'] = 'Implementation Timeline'
+            ws[f'A{row}'].font = SUBTITLE_FONT
+            row += 1
+
+            ms_headers = ['#', 'Milestone', 'Target Date', 'Quarter', 'Description']
+            ms_col_count = len(ms_headers)
+            ms_col_widths = [5, 35, 15, 12, 45]
+            for col, hdr in enumerate(ms_headers, 1):
+                cell = ws.cell(row=row, column=col, value=hdr)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                # Only widen columns if needed (schedule columns may already be wider)
+                cur_width = ws.column_dimensions[get_column_letter(col)].width or 0
+                if ms_col_widths[col - 1] > cur_width:
+                    ws.column_dimensions[get_column_letter(col)].width = ms_col_widths[col - 1]
+            row += 1
+
+            for idx, milestone in enumerate(milestones, 1):
+                ws.cell(row=row, column=1, value=idx).border = thin_border
+                ws.cell(row=row, column=2, value=milestone.get('milestone_name', milestone.get('name', ''))).border = thin_border
+                ws.cell(row=row, column=3, value=milestone.get('estimated_date', '')).border = thin_border
+                ws.cell(row=row, column=4, value=milestone.get('quarter', '')).border = thin_border
+                desc_cell = ws.cell(row=row, column=5, value=milestone.get('milestone_description', milestone.get('description', '')))
+                desc_cell.border = thin_border
+                desc_cell.alignment = Alignment(wrap_text=True)
+
+                for col in [1, 3, 4]:
+                    ws.cell(row=row, column=col).alignment = Alignment(horizontal='center')
+                row += 1
+
+    # =========================================================================
     # EXCEL EXPORT
     # =========================================================================
 
@@ -1032,7 +1562,7 @@ Return ONLY a valid JSON array with content for each row:
         row = 1
 
         # ===== TITLE =====
-        ws.merge_cells('A1:G1')
+        ws.merge_cells('A1:H1')
         ws['A1'] = 'SE-QPT Phase 4: AVIVA Didactic Plans Export'
         ws['A1'].font = TITLE_FONT
         ws['A1'].alignment = Alignment(horizontal='center')
@@ -1046,14 +1576,25 @@ Return ONLY a valid JSON array with content for each row:
         format_distribution = {}
         milestones = []
 
+        maturity_score = 0
+        maturity_level = 1
+        all_strategy_objs = []
+        target_group_range = ''
+
         if organization_id:
-            # Get organization name
+            # Get organization name and maturity
             org_result = self.db.execute(
-                text("SELECT organization_name FROM organization WHERE id = :org_id"),
+                text("SELECT organization_name, maturity_score FROM organization WHERE id = :org_id"),
                 {'org_id': organization_id}
             ).fetchone()
             if org_result:
                 org_name = org_result.organization_name
+                maturity_score = org_result.maturity_score or 0
+                if maturity_score >= 80: maturity_level = 5
+                elif maturity_score >= 60: maturity_level = 4
+                elif maturity_score >= 40: maturity_level = 3
+                elif maturity_score >= 20: maturity_level = 2
+                else: maturity_level = 1
 
             # Get Phase 3 output data
             from app.services.phase3_planning_service import Phase3PlanningService
@@ -1067,54 +1608,156 @@ Return ONLY a valid JSON array with content for each row:
                 view_type = config.get('selected_view', 'competency_level')
                 all_strategies = summary.get('all_strategies', [summary.get('strategy_name', '')])
                 target_group_size = summary.get('target_group_size', 0)
+                target_group_range = summary.get('target_group_range', '')
                 format_distribution = summary.get('format_distribution', {})
                 milestones = timeline.get('milestones', [])
+                all_strategy_objs = phase3_service._get_all_strategies(organization_id)
             except Exception as e:
                 logging.warning(f"Could not get Phase 3 data: {e}")
 
-        # Summary info
-        ws[f'A{row}'] = 'Organization:'
-        ws[f'A{row}'].font = LABEL_FONT
-        ws[f'B{row}'] = org_name
+        # Style for description/annotation rows
+        DESC_FONT = Font(italic=True, size=9, color='606266')
+        PHASE_FONT = Font(italic=True, size=9, color='909399')
+
+        # Helper: write an overview item with optional description and phase origin
+        def write_overview_item(r, label, value, phase_origin=None, description=None):
+            ws[f'A{r}'] = label
+            ws[f'A{r}'].font = LABEL_FONT
+            ws[f'B{r}'] = value
+            ws.merge_cells(f'B{r}:F{r}')
+            if phase_origin:
+                ws[f'G{r}'] = phase_origin
+                ws[f'G{r}'].font = PHASE_FONT
+            r += 1
+            if description:
+                ws[f'B{r}'] = description
+                ws[f'B{r}'].font = DESC_FONT
+                ws.merge_cells(f'B{r}:H{r}')
+                r += 1
+            return r
+
+        # ===== OVERVIEW SECTION =====
+        ws[f'A{row}'] = 'Overview'
+        ws[f'A{row}'].font = Font(size=12, bold=True)
         row += 1
 
-        ws[f'A{row}'] = 'Training View:'
-        ws[f'A{row}'].font = LABEL_FONT
-        ws[f'B{row}'] = 'Role-Clustered' if view_type == 'role_clustered' else 'Competency-Level'
-        row += 1
+        # Organization
+        row = write_overview_item(row, 'Organization:', org_name,
+            description='The organization for which this SE qualification plan was created.')
 
-        if all_strategies:
-            ws[f'A{row}'] = 'Selected Strategies:'
-            ws[f'A{row}'].font = LABEL_FONT
-            ws[f'B{row}'] = ', '.join(all_strategies) if all_strategies else 'Not Selected'
-            ws.merge_cells(f'B{row}:G{row}')
-            row += 1
+        # SE Maturity Level
+        row = write_overview_item(row, 'SE Maturity Level:', f'Level {maturity_level}/5 (Score: {maturity_score:.1f}/100)',
+            phase_origin='(Phase 1, Task 3)',
+            description='Organization SE maturity assessed via the Maturity Assessment questionnaire.')
 
-        ws[f'A{row}'] = 'Target Group Size:'
-        ws[f'A{row}'].font = LABEL_FONT
-        ws[f'B{row}'] = f"{target_group_size} participants"
-        row += 1
+        # Target Group Size
+        target_display = f"{target_group_size} participants"
+        if target_group_range and target_group_range != 'Unknown':
+            target_display += f" ({target_group_range})"
+        row = write_overview_item(row, 'Target Group Size:', target_display,
+            phase_origin='(Phase 1, Task 1)',
+            description='Number of employees in the target group to be qualified in SE competencies.')
 
-        ws[f'A{row}'] = 'Total Training Modules:'
-        ws[f'A{row}'].font = LABEL_FONT
-        ws[f'B{row}'] = len(aviva_plans)
-        row += 1
+        # Selected Strategies (with descriptions)
+        from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+        strategy_desc_map = {s['name']: s.get('description', '') for s in SE_TRAINING_STRATEGIES}
+        strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
 
+        strategy_names_str = ', '.join(all_strategies) if all_strategies else 'Not Selected'
+        if all_strategy_objs:
+            labeled = []
+            for s in all_strategy_objs:
+                lbl = f"{s['name']} (Primary)" if s.get('is_primary') else s['name']
+                labeled.append(lbl)
+            strategy_names_str = ', '.join(labeled)
+        row = write_overview_item(row, 'Selected Strategies:', strategy_names_str,
+            phase_origin='(Phase 1, Task 2)',
+            description='Qualification strategies selected to guide the training program design.')
+
+        # Individual strategy descriptions
+        for s_name in all_strategies:
+            desc = strategy_desc_map.get(s_name, '')
+            detail = strategy_detail_map.get(s_name, {})
+            if desc:
+                ws[f'B{row}'] = f"{s_name}:"
+                ws[f'B{row}'].font = Font(bold=True, size=9)
+                row += 1
+                ws[f'B{row}'] = desc
+                ws[f'B{row}'].font = DESC_FONT
+                ws.merge_cells(f'B{row}:H{row}')
+                ws[f'B{row}'].alignment = Alignment(wrap_text=True)
+                row += 1
+                details_parts = []
+                if detail.get('targetAudience'):
+                    details_parts.append(f"Target: {detail['targetAudience']}")
+                if detail.get('qualificationLevel'):
+                    details_parts.append(f"Level: {detail['qualificationLevel']}")
+                if detail.get('duration'):
+                    details_parts.append(f"Duration: {detail['duration']}")
+                if details_parts:
+                    ws[f'B{row}'] = ' | '.join(details_parts)
+                    ws[f'B{row}'].font = PHASE_FONT
+                    ws.merge_cells(f'B{row}:H{row}')
+                    row += 1
+
+        # Training View
+        is_role_clustered = view_type == 'role_clustered'
+        view_label = 'Role-Clustered' if is_role_clustered else 'Competency-Level'
+        if is_role_clustered:
+            view_desc = 'Modules grouped into 3 training packages (SE for Engineers, SE for Managers, SE for Interfacing Partners) based on role cluster assignments.'
+        else:
+            view_desc = 'Modules grouped by the 16 SE competency areas, each containing sub-modules at identified competency levels.'
+        row = write_overview_item(row, 'Training View:', view_label,
+            phase_origin='(Phase 3, Task 1)',
+            description=view_desc)
+
+        # Total Training Modules
+        row = write_overview_item(row, 'Total Training Modules:', len(aviva_plans),
+            phase_origin='(Phase 3, Task 2)',
+            description='Training modules identified from competency gap analysis and learning format assignment.')
+
+        # Total Estimated Duration
+        total_duration = sum(plan.get('total_duration_minutes', 0) for plan in aviva_plans) / 60
+        duration_display = f"{total_duration:.1f} hours"
+        if total_duration >= 8:
+            duration_display += f" (~{total_duration / 8:.1f} training days)"
+        row = write_overview_item(row, 'Total Est. Duration:', duration_display,
+            phase_origin='(Derived)',
+            description='Cumulative estimated training duration across all selected modules.')
+
+        # Format Distribution
         if format_distribution:
-            ws[f'A{row}'] = 'Format Distribution:'
-            ws[f'A{row}'].font = LABEL_FONT
             format_str = ', '.join([f"{k}: {v}" for k, v in format_distribution.items()])
-            ws[f'B{row}'] = format_str
-            ws.merge_cells(f'B{row}:G{row}')
-            row += 1
+            row = write_overview_item(row, 'Format Distribution:', format_str,
+                phase_origin='(Phase 3, Task 2)',
+                description='Distribution of learning formats selected for training delivery.')
 
+        # Export Date
         ws[f'A{row}'] = 'Export Date:'
         ws[f'A{row}'].font = LABEL_FONT
         ws[f'B{row}'] = datetime.now().strftime('%Y-%m-%d %H:%M')
         row += 2
 
-        # Set first column width for labels
+        # ===== GENAI DISCLAIMER =====
+        DISCLAIMER_FONT = Font(size=9, italic=True, color="666666")
+        disclaimer_text = (
+            "Disclaimer: This document contains content generated using Generative AI (GenAI) "
+            "and may contain inaccuracies or errors. It is intended as a reference document and "
+            "starting point. Review and modifications may be necessary to ensure accuracy and "
+            "alignment with your specific organizational requirements."
+        )
+        ws.merge_cells(f'A{row}:H{row}')
+        disclaimer_cell = ws[f'A{row}']
+        disclaimer_cell.value = disclaimer_text
+        disclaimer_cell.font = DISCLAIMER_FONT
+        disclaimer_cell.alignment = Alignment(wrap_text=True, vertical='top')
+        ws.row_dimensions[row].height = 40
+        row += 2
+
+        # Set column widths for overview area
         ws.column_dimensions['A'].width = 22
+        ws.column_dimensions['G'].width = 18
+        ws.column_dimensions['H'].width = 14
 
         # ===== MODULES TABLE =====
         ws[f'A{row}'] = 'Training Modules Overview'
@@ -1139,11 +1782,11 @@ Return ONLY a valid JSON array with content for each row:
         # Module summary headers - different for role-clustered vs competency-level
         if is_role_clustered:
             summary_headers = ['#', 'Training Program', 'Module Type', 'Module', 'Level', 'Format', 'Roles', 'Est. Participants', 'Duration (h)', 'Activities']
-            col_widths = [4, 20, 13, 40, 3, 32, 45, 12, 10, 9]
+            col_widths = [4, 20, 13, 40, 14, 32, 45, 12, 10, 9]
             center_cols = [1, 5, 8, 9, 10]
         else:
             summary_headers = ['#', 'Module', 'Level', 'Format', 'Roles', 'Est. Participants', 'Duration (h)', 'Activities']
-            col_widths = [4, 42, 3, 30, 50, 12, 10, 9]
+            col_widths = [4, 42, 14, 30, 50, 12, 10, 9]
             center_cols = [1, 3, 6, 7, 8]
 
         for col, header in enumerate(summary_headers, 1):
@@ -1152,112 +1795,148 @@ Return ONLY a valid JSON array with content for each row:
             cell.fill = header_fill
             cell.border = thin_border
             cell.alignment = Alignment(horizontal='center', vertical='center')
-            ws.column_dimensions[get_column_letter(col)].width = col_widths[col - 1]
+            _cl = get_column_letter(col)
+            ws.column_dimensions[_cl].width = max(col_widths[col - 1], ws.column_dimensions[_cl].width or 0)
         row += 1
 
-        # Style for Module Type column (role-clustered only)
-        COMMON_BASE_FILL = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
-        ROLE_SPECIFIC_FILL = PatternFill(start_color='DEEBF7', end_color='DEEBF7', fill_type='solid')
+        # Style constants for section headers
+        COMP_HEADER_FILL = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+        COMP_HEADER_FONT = Font(bold=True, italic=True, size=10)
+        PKG_ENGINEERS_FILL = PatternFill(start_color='D6E4F0', end_color='D6E4F0', fill_type='solid')
+        PKG_MANAGERS_FILL = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+        PKG_PARTNERS_FILL = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+        PKG_HEADER_FONT = Font(bold=True, size=11)
+        SUBCLUSTER_FILL = PatternFill(start_color='F5F5F5', end_color='F5F5F5', fill_type='solid')
+        SUBCLUSTER_FONT = Font(bold=True, italic=True, size=10, color='606060')
 
-        for idx, plan in enumerate(sorted_plans, 1):
-            level_num = plan.get('target_level', 0)
-            level_name = LEVEL_NAMES.get(level_num, f'Level {level_num}')
+        pkg_fills = {
+            'SE for Engineers': PKG_ENGINEERS_FILL,
+            'SE for Managers': PKG_MANAGERS_FILL,
+            'SE for Interfacing Partners': PKG_PARTNERS_FILL,
+        }
 
-            # Get estimated participants from plan or module info
-            est_participants = plan.get('estimated_participants', 0)
+        num_cols = len(summary_headers)
 
-            # Build module display name without level (since Level is a separate column)
-            # Format: "Competency Name" or "Competency Name (Method/Tool)"
+        def write_section_header_aviva(row_num, label, fill, font):
+            merge_range = f'A{row_num}:{get_column_letter(num_cols)}{row_num}'
+            ws.merge_cells(merge_range)
+            cell = ws[f'A{row_num}']
+            cell.value = label
+            cell.fill = fill
+            cell.font = font
+            cell.alignment = Alignment(vertical='center')
+            return row_num + 1
+
+        def format_module_display(plan):
             competency_name = plan.get('competency_name', '')
             pmt_type = plan.get('pmt_type', '')
             if pmt_type and pmt_type.lower() not in ['combined', '', 'null', 'none']:
-                module_display_name = f"{competency_name} ({pmt_type.capitalize()})"
-            else:
-                module_display_name = competency_name
+                return f"{competency_name} ({pmt_type.capitalize()})"
+            return competency_name
 
-            # Get roles
+        def write_plan_row_rc(row_num, plan, idx):
+            cluster_name = plan.get('cluster_name', 'Uncategorized')
+            subcluster = plan.get('subcluster')
+            if 'Engineer' in cluster_name:
+                module_type = 'Common Base' if subcluster == 'common' else 'Role-Specific'
+            else:
+                module_type = '-'
+            level_name = LEVEL_NAMES.get(plan.get('target_level', 0), f"Level {plan.get('target_level', 0)}")
             roles = plan.get('roles_needing_training', [])
             roles_str = ', '.join(roles) if roles and isinstance(roles, list) else ''
-
-            if is_role_clustered:
-                # Determine module type
-                cluster_name = plan.get('cluster_name', 'Uncategorized')
-                subcluster = plan.get('subcluster')
-                if 'Engineer' in cluster_name:
-                    module_type = 'Common Base' if subcluster == 'common' else 'Role-Specific'
-                else:
-                    module_type = '-'
-
-                ws.cell(row=row, column=1, value=idx).border = thin_border
-                ws.cell(row=row, column=2, value=cluster_name).border = thin_border
-                type_cell = ws.cell(row=row, column=3, value=module_type)
-                type_cell.border = thin_border
-                # Apply color fill for module type
-                if module_type == 'Common Base':
-                    type_cell.fill = COMMON_BASE_FILL
-                elif module_type == 'Role-Specific':
-                    type_cell.fill = ROLE_SPECIFIC_FILL
-                ws.cell(row=row, column=4, value=module_display_name).border = thin_border
-                ws.cell(row=row, column=5, value=level_name).border = thin_border
-                ws.cell(row=row, column=6, value=plan.get('learning_format', '')).border = thin_border
-                roles_cell = ws.cell(row=row, column=7, value=roles_str)
-                roles_cell.border = thin_border
-                roles_cell.alignment = Alignment(wrap_text=True)
-                ws.cell(row=row, column=8, value=est_participants).border = thin_border
-                ws.cell(row=row, column=9, value=round(plan['total_duration_minutes'] / 60, 1)).border = thin_border
-                ws.cell(row=row, column=10, value=len(plan.get('activities', []))).border = thin_border
-            else:
-                ws.cell(row=row, column=1, value=idx).border = thin_border
-                ws.cell(row=row, column=2, value=module_display_name).border = thin_border
-                ws.cell(row=row, column=3, value=level_name).border = thin_border
-                ws.cell(row=row, column=4, value=plan.get('learning_format', '')).border = thin_border
-                roles_cell = ws.cell(row=row, column=5, value=roles_str)
-                roles_cell.border = thin_border
-                roles_cell.alignment = Alignment(wrap_text=True)
-                ws.cell(row=row, column=6, value=est_participants).border = thin_border
-                ws.cell(row=row, column=7, value=round(plan['total_duration_minutes'] / 60, 1)).border = thin_border
-                ws.cell(row=row, column=8, value=len(plan.get('activities', []))).border = thin_border
-
-            # Center align certain columns
+            ws.cell(row=row_num, column=1, value=idx).border = thin_border
+            ws.cell(row=row_num, column=2, value=cluster_name).border = thin_border
+            ws.cell(row=row_num, column=3, value=module_type).border = thin_border
+            ws.cell(row=row_num, column=4, value=format_module_display(plan)).border = thin_border
+            ws.cell(row=row_num, column=5, value=level_name).border = thin_border
+            ws.cell(row=row_num, column=6, value=plan.get('learning_format', '')).border = thin_border
+            roles_cell = ws.cell(row=row_num, column=7, value=roles_str)
+            roles_cell.border = thin_border
+            roles_cell.alignment = Alignment(wrap_text=True)
+            ws.cell(row=row_num, column=8, value=plan.get('estimated_participants', 0)).border = thin_border
+            ws.cell(row=row_num, column=9, value=round(plan['total_duration_minutes'] / 60, 1)).border = thin_border
+            ws.cell(row=row_num, column=10, value=len(plan.get('activities', []))).border = thin_border
             for col in center_cols:
-                ws.cell(row=row, column=col).alignment = Alignment(horizontal='center')
-            row += 1
+                ws.cell(row=row_num, column=col).alignment = Alignment(horizontal='center')
+            return row_num + 1
+
+        def write_plan_row_cl(row_num, plan, idx):
+            level_name = LEVEL_NAMES.get(plan.get('target_level', 0), f"Level {plan.get('target_level', 0)}")
+            roles = plan.get('roles_needing_training', [])
+            roles_str = ', '.join(roles) if roles and isinstance(roles, list) else ''
+            ws.cell(row=row_num, column=1, value=idx).border = thin_border
+            ws.cell(row=row_num, column=2, value=format_module_display(plan)).border = thin_border
+            ws.cell(row=row_num, column=3, value=level_name).border = thin_border
+            ws.cell(row=row_num, column=4, value=plan.get('learning_format', '')).border = thin_border
+            roles_cell = ws.cell(row=row_num, column=5, value=roles_str)
+            roles_cell.border = thin_border
+            roles_cell.alignment = Alignment(wrap_text=True)
+            ws.cell(row=row_num, column=6, value=plan.get('estimated_participants', 0)).border = thin_border
+            ws.cell(row=row_num, column=7, value=round(plan['total_duration_minutes'] / 60, 1)).border = thin_border
+            ws.cell(row=row_num, column=8, value=len(plan.get('activities', []))).border = thin_border
+            for col in center_cols:
+                ws.cell(row=row_num, column=col).alignment = Alignment(horizontal='center')
+            return row_num + 1
+
+        from itertools import groupby
+
+        def write_comp_groups_aviva(row_num, section_plans, idx_counter, write_fn):
+            sorted_by_comp = sorted(section_plans, key=lambda p: p.get('competency_id', 0))
+            for _, grp_iter in groupby(sorted_by_comp, key=lambda p: p.get('competency_id', 0)):
+                grp = list(grp_iter)
+                comp_name = grp[0].get('competency_name', 'Unknown')
+                count = len(grp)
+                label = f"    {comp_name} ({count} sub-module{'s' if count != 1 else ''})"
+                row_num = write_section_header_aviva(row_num, label, COMP_HEADER_FILL, COMP_HEADER_FONT)
+                for plan in grp:
+                    idx_counter[0] += 1
+                    row_num = write_fn(row_num, plan, idx_counter[0])
+            return row_num
+
+        if is_role_clustered:
+            idx_counter = [0]
+            # Group sorted_plans by cluster_name
+            for cluster_name, cluster_iter in groupby(sorted_plans, key=lambda p: p.get('cluster_name', 'Uncategorized')):
+                cluster_plans = list(cluster_iter)
+                pkg_fill = pkg_fills.get(cluster_name, PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid'))
+                row = write_section_header_aviva(row, cluster_name, pkg_fill, PKG_HEADER_FONT)
+
+                if 'Engineer' in cluster_name:
+                    common_plans = [p for p in cluster_plans if p.get('subcluster') == 'common']
+                    pathway_plans = [p for p in cluster_plans if p.get('subcluster') != 'common']
+
+                    if common_plans:
+                        cb_label = f"  Common Base ({len(common_plans)} module{'s' if len(common_plans) != 1 else ''})"
+                        row = write_section_header_aviva(row, cb_label, SUBCLUSTER_FILL, SUBCLUSTER_FONT)
+                        row = write_comp_groups_aviva(row, common_plans, idx_counter, write_plan_row_rc)
+
+                    if pathway_plans:
+                        rs_label = f"  Role-Specific Pathways ({len(pathway_plans)} module{'s' if len(pathway_plans) != 1 else ''})"
+                        row = write_section_header_aviva(row, rs_label, SUBCLUSTER_FILL, SUBCLUSTER_FONT)
+                        row = write_comp_groups_aviva(row, pathway_plans, idx_counter, write_plan_row_rc)
+                else:
+                    row = write_comp_groups_aviva(row, cluster_plans, idx_counter, write_plan_row_rc)
+        else:
+            idx_counter = [0]
+            sorted_by_comp = sorted(sorted_plans, key=lambda p: p.get('competency_id', 0))
+            for _, grp_iter in groupby(sorted_by_comp, key=lambda p: p.get('competency_id', 0)):
+                grp = list(grp_iter)
+                comp_name = grp[0].get('competency_name', 'Unknown')
+                count = len(grp)
+                label = f"{comp_name} ({count} sub-module{'s' if count != 1 else ''})"
+                row = write_section_header_aviva(row, label, COMP_HEADER_FILL, COMP_HEADER_FONT)
+                for plan in grp:
+                    idx_counter[0] += 1
+                    row = write_plan_row_cl(row, plan, idx_counter[0])
 
         row += 2
 
-        # ===== TIMELINE SECTION =====
-        if milestones:
-            ws[f'A{row}'] = 'Implementation Timeline'
-            ws[f'A{row}'].font = SUBTITLE_FONT
-            row += 1
+        # ===== TRAINING DELIVERY SCHEDULE SHEET =====
+        schedule_data = self._generate_daily_schedule(sorted_plans, view_type, milestones)
+        ws_schedule = wb.create_sheet(title="Training Schedule", index=1)
+        self._write_schedule_sheet(ws_schedule, schedule_data, view_type, milestones=milestones)
 
-            timeline_headers = ['#', 'Milestone', 'Date', 'Quarter', 'Description']
-            timeline_widths = [5, 35, 15, 18, 30]
-            for col, header in enumerate(timeline_headers, 1):
-                cell = ws.cell(row=row, column=col, value=header)
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-                cell.border = thin_border
-                ws.column_dimensions[get_column_letter(col)].width = max(
-                    ws.column_dimensions[get_column_letter(col)].width or 0,
-                    timeline_widths[col - 1]
-                )
-            row += 1
-
-            for idx, milestone in enumerate(milestones, 1):
-                ws.cell(row=row, column=1, value=idx).border = thin_border
-                ws.cell(row=row, column=2, value=milestone.get('milestone_name', milestone.get('name', ''))).border = thin_border
-                ws.cell(row=row, column=3, value=milestone.get('estimated_date', '')).border = thin_border
-                ws.cell(row=row, column=4, value=milestone.get('quarter', '')).border = thin_border
-                ws.cell(row=row, column=5, value=milestone.get('milestone_description', milestone.get('description', ''))).border = thin_border
-
-                for col in [1, 3, 4]:
-                    ws.cell(row=row, column=col).alignment = Alignment(horizontal='center')
-                ws.cell(row=row, column=5).alignment = Alignment(wrap_text=True)
-                row += 1
-
-        # ===== SECOND SHEET: ALL AVIVA PLANS COMBINED =====
+        # ===== THIRD SHEET: ALL AVIVA PLANS COMBINED =====
         ws_aviva = wb.create_sheet(title="AVIVA Plans")
         aviva_row = 1
 
@@ -1267,6 +1946,15 @@ Return ONLY a valid JSON array with content for each row:
         ws_aviva['A1'].font = TITLE_FONT
         ws_aviva['A1'].alignment = Alignment(horizontal='center')
         aviva_row = 3
+
+        # GenAI disclaimer on AVIVA sheet
+        ws_aviva.merge_cells(f'A{aviva_row}:G{aviva_row}')
+        aviva_disclaimer_cell = ws_aviva[f'A{aviva_row}']
+        aviva_disclaimer_cell.value = disclaimer_text
+        aviva_disclaimer_cell.font = DISCLAIMER_FONT
+        aviva_disclaimer_cell.alignment = Alignment(wrap_text=True, vertical='top')
+        ws_aviva.row_dimensions[aviva_row].height = 40
+        aviva_row += 2
 
         # AVIVA headers
         aviva_headers = ['Start', 'Min', 'Type', 'AVIVA', 'What (Content)', 'How (Method)', 'Material']

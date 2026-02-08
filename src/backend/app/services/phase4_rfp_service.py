@@ -57,6 +57,7 @@ class Phase4RFPService:
     )
 
     LEVEL_NAMES = {1: 'Knowing', 2: 'Understanding', 4: 'Applying', 6: 'Mastering'}
+    LEVEL_DURATION_HOURS = {1: 1, 2: 2, 4: 4, 6: 8}
     COMPETENCY_AREAS = {
         'Core': ['Systems Thinking', 'Systems Modelling and Analysis', 'Lifecycle Consideration', 'Customer / Value Orientation'],
         'Technical': ['Requirements Definition', 'System Architecting', 'Integration, Verification, Validation', 'Operation and Support'],
@@ -762,12 +763,18 @@ Return ONLY a JSON array of content strings:
             {'org_id': organization_id}
         ).fetchall()
 
+        # Use richer descriptions from strategy_selection_engine as fallback
+        from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+        strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
+
         strategies = []
         for r in results:
+            db_desc = r.strategy_description or ''
+            rich_desc = strategy_detail_map.get(r.strategy_name, {}).get('description', '')
             strategies.append({
                 'id': r.strategy_template_id,
                 'name': r.strategy_name,
-                'description': r.strategy_description,
+                'description': rich_desc or db_desc,
                 'priority': r.priority,
                 'is_primary': r.priority == 1
             })
@@ -1069,9 +1076,18 @@ Return ONLY a JSON array of content strings:
     # COMPLETE RFP DATA AGGREGATION
     # =========================================================================
 
-    def get_rfp_data(self, organization_id: int, include_aviva: bool = False) -> Dict[str, Any]:
-        """Aggregate all data needed for RFP export"""
-        current_app.logger.info(f"[RFP] Aggregating data for organization {organization_id}")
+    def get_rfp_data(self, organization_id: int, include_aviva: bool = False,
+                     module_ids: Optional[List[int]] = None) -> Dict[str, Any]:
+        """Aggregate all data needed for RFP export.
+
+        Args:
+            organization_id: Organization ID
+            include_aviva: Whether to include AVIVA plan data
+            module_ids: Optional list of module IDs to filter (from AVIVA selection).
+                       If provided, only these modules are included in the export.
+        """
+        current_app.logger.info(f"[RFP] Aggregating data for organization {organization_id}"
+                                f", module_ids filter: {len(module_ids) if module_ids else 'all'}")
 
         # Phase 1 data
         org_profile = self.get_organization_profile(organization_id)
@@ -1088,6 +1104,16 @@ Return ONLY a JSON array of content strings:
 
         # Phase 3 data
         phase3_data = self.get_phase3_data(organization_id)
+
+        # Filter modules by selected IDs if provided
+        if module_ids is not None and phase3_data.get('modules'):
+            module_ids_set = set(module_ids)
+            all_count = len(phase3_data['modules'])
+            phase3_data['modules'] = [
+                m for m in phase3_data['modules'] if m.get('id') in module_ids_set
+            ]
+            filtered_count = len(phase3_data['modules'])
+            current_app.logger.info(f"[RFP] Filtered modules: {filtered_count}/{all_count} (selected from AVIVA)")
 
         # Role-competency matrix (if role-based)
         role_competency_matrix = []
@@ -1113,16 +1139,22 @@ Return ONLY a JSON array of content strings:
     # EXCEL EXPORT
     # =========================================================================
 
-    def export_rfp_to_excel(self, organization_id: int, include_aviva: bool = False) -> io.BytesIO:
+    def export_rfp_to_excel(self, organization_id: int, include_aviva: bool = False,
+                            module_ids: Optional[List[int]] = None) -> io.BytesIO:
         """
         Export comprehensive RFP document to Excel.
 
         Creates a multi-sheet workbook with all Phase 1-3 data.
+
+        Args:
+            organization_id: Organization ID
+            include_aviva: Whether to include AVIVA data
+            module_ids: Optional list of module IDs to filter (from AVIVA selection)
         """
         current_app.logger.info(f"[RFP] Starting Excel export for organization {organization_id}")
 
-        # Get all data
-        data = self.get_rfp_data(organization_id, include_aviva=False)
+        # Get all data (with optional module filtering)
+        data = self.get_rfp_data(organization_id, include_aviva=False, module_ids=module_ids)
 
         wb = Workbook()
 
@@ -1138,8 +1170,8 @@ Return ONLY a JSON array of content strings:
         # Sheet 4: Training Modules
         self._write_modules_sheet(wb, data)
 
-        # Sheet 5: Timeline
-        self._write_timeline_sheet(wb, data)
+        # Sheet 5: Training Schedule (replaces Timeline)
+        self._write_training_schedule_sheet(wb, data)
 
         # Sheet 6: Role-Competency Matrix (if available)
         if data.get('role_competency_matrix'):
@@ -1165,127 +1197,221 @@ Return ONLY a JSON array of content strings:
         phase3 = data.get('phase3', {})
         summary = phase3.get('summary', {})
         gaps = data.get('gaps', {})
+        modules = phase3.get('modules', [])
+
+        # Style for description/annotation rows
+        DESC_FONT = Font(italic=True, size=9, color='606266')
+        PHASE_FONT = Font(italic=True, size=9, color='909399')
+
+        # Helper: write an overview item with optional description and phase origin
+        def write_overview_item(r, label, value, phase_origin=None, description=None):
+            ws[f'A{r}'] = label
+            ws[f'A{r}'].font = self.LABEL_FONT
+            ws[f'B{r}'] = value
+            ws.merge_cells(f'B{r}:F{r}')
+            if phase_origin:
+                ws[f'G{r}'] = phase_origin
+                ws[f'G{r}'].font = PHASE_FONT
+            r += 1
+            if description:
+                ws[f'B{r}'] = description
+                ws[f'B{r}'].font = DESC_FONT
+                ws.merge_cells(f'B{r}:H{r}')
+                r += 1
+            return r
 
         row = 1
 
+        # Section header styling for this sheet
+        SECTION_FILL = PatternFill(start_color='D6E4F0', end_color='D6E4F0', fill_type='solid')
+        SECTION_HDR_FONT = Font(size=11, bold=True, color='2F5496')
+        SECTION_BORDER = Border(bottom=Side(style='medium', color='4472C4'))
+
+        def write_section_header(r, title):
+            ws.merge_cells(f'A{r}:H{r}')
+            cell = ws[f'A{r}']
+            cell.value = title
+            cell.font = SECTION_HDR_FONT
+            cell.fill = SECTION_FILL
+            cell.border = SECTION_BORDER
+            cell.alignment = Alignment(vertical='center')
+            ws.row_dimensions[r].height = 24
+            return r + 1
+
         # Title
-        ws.merge_cells('A1:G1')
-        ws['A1'] = 'SE Qualification Program - RFP Export'
-        ws['A1'].font = self.TITLE_FONT
-        ws['A1'].alignment = Alignment(horizontal='center')
-        row = 3
+        ws.merge_cells('A1:H1')
+        ws['A1'] = 'SE Qualification Program - Request for Proposal'
+        ws['A1'].font = Font(size=16, bold=True, color='FFFFFF')
+        ws['A1'].fill = self.HEADER_FILL
+        ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 36
 
-        # Organization Profile Section
-        ws[f'A{row}'] = 'ORGANIZATION PROFILE'
-        ws[f'A{row}'].font = self.SUBTITLE_FONT
+        # Subtitle
+        ws.merge_cells('A2:H2')
+        ws['A2'] = f"Organization: {org.get('name', 'Unknown')}  |  Generated: {data.get('export_timestamp', '')}"
+        ws['A2'].font = Font(size=10, italic=True, color='606266')
+        ws['A2'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[2].height = 22
+        row = 4
+
+        # ===== ORGANIZATION PROFILE =====
+        row = write_section_header(row, 'ORGANIZATION PROFILE')
+
+        row = write_overview_item(row, 'Organization:', org.get('name', 'Unknown'),
+            description='The organization for which this SE qualification program RFP was created.')
+
+        row = write_overview_item(row, 'SE Maturity Level:',
+            f"Level {org.get('maturity_level', 1)}/5 (Score: {org.get('maturity_score', 0):.1f}/100)",
+            phase_origin='(Phase 1, Task 3)',
+            description='Organization SE maturity assessed via the Maturity Assessment questionnaire.')
+
+        row = write_overview_item(row, 'Assessment Pathway:',
+            maturity.get('assessment_pathway', 'Task-based competency assessment'),
+            phase_origin='(Phase 2)',
+            description='The competency assessment method used to identify qualification gaps.')
+
         row += 1
 
-        profile_data = [
-            ('Organization:', org.get('name', 'Unknown')),
-            ('Export Date:', data.get('export_timestamp', '')),
-            ('SE Maturity Score:', f"{org.get('maturity_score', 0)}/100 (Level {org.get('maturity_level', 1)}/5)"),
-            ('Assessment Pathway:', maturity.get('assessment_pathway', 'Task-based competency assessment')),
-        ]
+        # ===== QUALIFICATION STRATEGY =====
+        row = write_section_header(row, 'QUALIFICATION STRATEGY')
 
-        for label, value in profile_data:
-            ws[f'A{row}'] = label
-            ws[f'A{row}'].font = self.LABEL_FONT
-            ws[f'B{row}'] = value
-            row += 1
-
-        row += 1
-
-        # Qualification Strategy Section
-        ws[f'A{row}'] = 'QUALIFICATION STRATEGY'
-        ws[f'A{row}'].font = self.SUBTITLE_FONT
-        row += 1
+        # Get strategy descriptions
+        from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+        strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
 
         if strategies:
-            primary = next((s for s in strategies if s.get('is_primary')), strategies[0] if strategies else None)
-            if primary:
-                ws[f'A{row}'] = 'Primary Strategy:'
-                ws[f'A{row}'].font = self.LABEL_FONT
-                ws[f'B{row}'] = primary.get('name', '')
-                row += 1
+            # List all strategies with primary/secondary labels
+            labeled = []
+            for s in strategies:
+                lbl = f"{s['name']} (Primary)" if s.get('is_primary') else s['name']
+                labeled.append(lbl)
+            row = write_overview_item(row, 'Selected Strategies:', ', '.join(labeled),
+                phase_origin='(Phase 1, Task 2)',
+                description='Qualification strategies selected to guide the training program design.')
 
-            secondary = [s for s in strategies if not s.get('is_primary')]
-            if secondary:
-                ws[f'A{row}'] = 'Secondary Strategy:'
-                ws[f'A{row}'].font = self.LABEL_FONT
-                ws[f'B{row}'] = ', '.join(s.get('name', '') for s in secondary)
-                row += 1
+            # Individual strategy descriptions
+            for s in strategies:
+                s_name = s.get('name', '')
+                # Use description from data (DB) first, fall back to engine definitions
+                desc = s.get('description', '') or strategy_detail_map.get(s_name, {}).get('description', '')
+                detail = strategy_detail_map.get(s_name, {})
+                if desc:
+                    ws[f'B{row}'] = f"{s_name}{' (Primary)' if s.get('is_primary') else ''}:"
+                    ws[f'B{row}'].font = Font(bold=True, size=9)
+                    row += 1
+                    ws[f'B{row}'] = desc
+                    ws[f'B{row}'].font = DESC_FONT
+                    ws.merge_cells(f'B{row}:H{row}')
+                    ws[f'B{row}'].alignment = Alignment(wrap_text=True)
+                    row += 1
+                    details_parts = []
+                    if detail.get('targetAudience'):
+                        details_parts.append(f"Target: {detail['targetAudience']}")
+                    if detail.get('qualificationLevel'):
+                        details_parts.append(f"Level: {detail['qualificationLevel']}")
+                    if detail.get('duration'):
+                        details_parts.append(f"Duration: {detail['duration']}")
+                    if details_parts:
+                        ws[f'B{row}'] = ' | '.join(details_parts)
+                        ws[f'B{row}'].font = PHASE_FONT
+                        ws.merge_cells(f'B{row}:H{row}')
+                        row += 1
         else:
-            ws[f'A{row}'] = 'Strategy:'
-            ws[f'A{row}'].font = self.LABEL_FONT
-            ws[f'B{row}'] = 'Not Selected'
-            row += 1
+            row = write_overview_item(row, 'Strategy:', 'Not Selected')
 
         row += 1
 
-        # Program Scope Section
-        ws[f'A{row}'] = 'PROGRAM SCOPE'
-        ws[f'A{row}'].font = self.SUBTITLE_FONT
-        row += 1
+        # ===== PROGRAM SCOPE =====
+        row = write_section_header(row, 'PROGRAM SCOPE')
 
-        scope_data = [
-            ('Target Group Size:', f"{target.get('size', 0)} employees ({target.get('range_label', '')})"),
-            ('Total Training Modules:', summary.get('total_modules', 0)),
-            ('Roles Defined:', len(data.get('roles', []))),
-        ]
+        row = write_overview_item(row, 'Target Group Size:',
+            f"{target.get('size', 0)} employees ({target.get('range_label', '')})",
+            phase_origin='(Phase 1, Task 1)',
+            description='Number of employees in the target group to be qualified in SE competencies.')
 
-        for label, value in scope_data:
-            ws[f'A{row}'] = label
-            ws[f'A{row}'].font = self.LABEL_FONT
-            ws[f'B{row}'] = value
-            row += 1
+        # Training View
+        view_type = summary.get('view_type', phase3.get('view_type', ''))
+        if not view_type:
+            # Detect from modules
+            view_type = 'role_clustered' if any(m.get('cluster_name') for m in modules) else 'competency_level'
+        is_role_clustered = view_type == 'role_clustered'
+        view_label = 'Role-Clustered' if is_role_clustered else 'Competency-Level'
+        if is_role_clustered:
+            view_desc = 'Modules grouped into 3 training packages (SE for Engineers, SE for Managers, SE for Interfacing Partners) based on role cluster assignments.'
+        else:
+            view_desc = 'Modules grouped by the 16 SE competency areas, each containing sub-modules at identified competency levels.'
+        row = write_overview_item(row, 'Training View:', view_label,
+            phase_origin='(Phase 3, Task 1)',
+            description=view_desc)
+
+        row = write_overview_item(row, 'Total Training Modules:', summary.get('total_modules', len(modules)),
+            phase_origin='(Phase 3, Task 2)',
+            description='Training modules identified from competency gap analysis and learning format assignment.')
+
+        row = write_overview_item(row, 'Roles Defined:', len(data.get('roles', [])),
+            phase_origin='(Phase 2, Task 1)',
+            description='Organization roles assessed for SE competency gaps.')
+
+        # Total Estimated Duration
+        total_duration = sum(self.LEVEL_DURATION_HOURS.get(m.get('target_level', 0), 2) for m in modules)
+        duration_display = f"{total_duration} hours"
+        if total_duration >= 8:
+            duration_display += f" (~{total_duration / 8:.1f} training days)"
+        row = write_overview_item(row, 'Total Est. Duration:', duration_display,
+            phase_origin='(Derived)',
+            description='Cumulative estimated training duration across all modules (L1=1h, L2=2h, L4=4h, L6=8h per module).')
 
         # Format distribution
         format_dist = summary.get('format_distribution', {})
         if format_dist:
-            ws[f'A{row}'] = 'Format Distribution:'
-            ws[f'A{row}'].font = self.LABEL_FONT
-            ws[f'B{row}'] = ', '.join(f"{k}: {v}" for k, v in format_dist.items())
-            row += 1
+            format_str = ', '.join(f"{k}: {v}" for k, v in format_dist.items())
+            row = write_overview_item(row, 'Format Distribution:', format_str,
+                phase_origin='(Phase 3, Task 2)',
+                description='Distribution of learning formats selected for training delivery.')
 
         row += 1
 
         # PMT Context Section (text descriptions, not arrays)
         pmt = data.get('pmt_context', {})
         if any([pmt.get('tools'), pmt.get('methods'), pmt.get('processes')]):
-            ws[f'A{row}'] = 'PMT CONTEXT'
-            ws[f'A{row}'].font = self.SUBTITLE_FONT
-            row += 1
+            row = write_section_header(row, 'PMT CONTEXT')
 
             if pmt.get('industry'):
                 ws[f'A{row}'] = 'Industry:'
                 ws[f'A{row}'].font = self.LABEL_FONT
+                ws.merge_cells(f'B{row}:H{row}')
                 ws[f'B{row}'] = pmt['industry']
                 row += 1
 
             if pmt.get('tools'):
                 ws[f'A{row}'] = 'Tools:'
                 ws[f'A{row}'].font = self.LABEL_FONT
+                ws.merge_cells(f'B{row}:H{row}')
                 ws[f'B{row}'] = pmt['tools']
-                ws[f'B{row}'].alignment = Alignment(wrap_text=True)
+                ws[f'B{row}'].alignment = Alignment(wrap_text=True, vertical='top')
                 row += 1
 
             if pmt.get('methods'):
                 ws[f'A{row}'] = 'Methods:'
                 ws[f'A{row}'].font = self.LABEL_FONT
+                ws.merge_cells(f'B{row}:H{row}')
                 ws[f'B{row}'] = pmt['methods']
-                ws[f'B{row}'].alignment = Alignment(wrap_text=True)
+                ws[f'B{row}'].alignment = Alignment(wrap_text=True, vertical='top')
                 row += 1
 
             if pmt.get('processes'):
                 ws[f'A{row}'] = 'Processes:'
                 ws[f'A{row}'].font = self.LABEL_FONT
+                ws.merge_cells(f'B{row}:H{row}')
                 ws[f'B{row}'] = pmt['processes']
-                ws[f'B{row}'].alignment = Alignment(wrap_text=True)
+                ws[f'B{row}'].alignment = Alignment(wrap_text=True, vertical='top')
                 row += 1
 
-        # Set column widths
+        # Set column widths (B:H are merged for values, so B just needs moderate width)
         ws.column_dimensions['A'].width = 22
-        ws.column_dimensions['B'].width = 60
+        ws.column_dimensions['B'].width = 18
+        ws.column_dimensions['G'].width = 18
+        ws.column_dimensions['H'].width = 14
 
     def _write_maturity_sheet(self, wb: Workbook, data: Dict[str, Any]):
         """Write the Maturity Assessment sheet"""
@@ -1376,6 +1502,9 @@ Return ONLY a JSON array of content strings:
         ws[f'A{row}'].font = self.LABEL_FONT
         row += 2
 
+        # Set minimum col A width for overview labels before table '#' column narrows it
+        ws.column_dimensions['A'].width = 16
+
         if not roles:
             ws[f'A{row}'] = 'No roles defined for this organization.'
             return
@@ -1390,7 +1519,8 @@ Return ONLY a JSON array of content strings:
             cell.fill = self.HEADER_FILL
             cell.border = self.THIN_BORDER
             cell.alignment = Alignment(horizontal='center')
-            ws.column_dimensions[get_column_letter(col)].width = col_widths[col - 1]
+            _cl = get_column_letter(col)
+            ws.column_dimensions[_cl].width = max(col_widths[col - 1], ws.column_dimensions[_cl].width or 0)
         row += 1
 
         for idx, role in enumerate(roles, 1):
@@ -1428,17 +1558,20 @@ Return ONLY a JSON array of content strings:
         ws[f'B{row}'] = len(modules)
         row += 2
 
+        # Set minimum col A width for overview labels before table '#' column narrows it
+        ws.column_dimensions['A'].width = 18
+
         if not modules:
             ws[f'A{row}'] = 'No training modules configured.'
             return
 
         # Headers based on view type
         if view_type == 'role_clustered':
-            headers = ['#', 'Training Program', 'Type', 'Module', 'Level', 'Format', 'Est. Participants']
-            col_widths = [4, 22, 12, 35, 14, 20, 14]
+            headers = ['#', 'Training Program', 'Type', 'Module', 'Level', 'Format', 'Est. Participants', 'Est. Duration (h)']
+            col_widths = [4, 22, 12, 35, 14, 28, 14, 14]
         else:
-            headers = ['#', 'Module', 'Level', 'Format', 'Est. Participants']
-            col_widths = [4, 40, 14, 20, 14]
+            headers = ['#', 'Module', 'Level', 'Format', 'Est. Participants', 'Est. Duration (h)']
+            col_widths = [4, 40, 14, 28, 14, 14]
 
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=row, column=col, value=header)
@@ -1446,70 +1579,152 @@ Return ONLY a JSON array of content strings:
             cell.fill = self.HEADER_FILL
             cell.border = self.THIN_BORDER
             cell.alignment = Alignment(horizontal='center')
-            ws.column_dimensions[get_column_letter(col)].width = col_widths[col - 1]
+            _cl = get_column_letter(col)
+            ws.column_dimensions[_cl].width = max(col_widths[col - 1], ws.column_dimensions[_cl].width or 0)
         row += 1
 
-        # Sort modules by ID
+        # Style constants for section headers
+        COMP_HEADER_FILL = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+        COMP_HEADER_FONT = Font(bold=True, italic=True, size=10)
+        PKG_ENGINEERS_FILL = PatternFill(start_color='D6E4F0', end_color='D6E4F0', fill_type='solid')
+        PKG_MANAGERS_FILL = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+        PKG_PARTNERS_FILL = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+        PKG_HEADER_FONT = Font(bold=True, size=11)
+        SUBCLUSTER_FILL = PatternFill(start_color='F5F5F5', end_color='F5F5F5', fill_type='solid')
+        SUBCLUSTER_FONT = Font(bold=True, italic=True, size=10, color='606060')
+
+        pkg_fills = {
+            'SE for Engineers': PKG_ENGINEERS_FILL,
+            'SE for Managers': PKG_MANAGERS_FILL,
+            'SE for Interfacing Partners': PKG_PARTNERS_FILL,
+        }
+
+        num_cols = len(headers)
+
+        def write_section_hdr(row_num, label, fill, font):
+            merge_range = f'A{row_num}:{get_column_letter(num_cols)}{row_num}'
+            ws.merge_cells(merge_range)
+            cell = ws[f'A{row_num}']
+            cell.value = label
+            cell.fill = fill
+            cell.font = font
+            cell.alignment = Alignment(vertical='center')
+            return row_num + 1
+
+        def format_module_name(m):
+            pmt = m.get('pmt_type', '')
+            name = m.get('competency_name', '')
+            if pmt and pmt.lower() not in ['combined', '', 'null']:
+                name += f" ({pmt.capitalize()})"
+            return name
+
+        def resolve_format(m):
+            selected_format = m.get('selected_format') or {}
+            return (m.get('learning_format_name') or
+                    selected_format.get('format_name') or
+                    m.get('selected_format_name') or
+                    m.get('format_name') or
+                    m.get('learning_format') or '-')
+
+        def write_module_row_rc(row_num, m, idx):
+            cluster_name = m.get('cluster_name', '-')
+            subcluster = m.get('subcluster')
+            if 'Engineer' in (cluster_name or ''):
+                module_type = 'Common Base' if subcluster == 'common' else 'Role-Specific'
+            else:
+                module_type = '-'
+            level_num = m.get('target_level', 0)
+            level_name = self.LEVEL_NAMES.get(level_num, '')
+            duration = self.LEVEL_DURATION_HOURS.get(level_num, 2)
+
+            ws.cell(row=row_num, column=1, value=idx).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=2, value=cluster_name).border = self.THIN_BORDER
+            type_cell = ws.cell(row=row_num, column=3, value=module_type)
+            type_cell.border = self.THIN_BORDER
+            if module_type == 'Common Base':
+                type_cell.fill = self.GREEN_FILL
+            elif module_type == 'Role-Specific':
+                type_cell.fill = self.LIGHT_FILL
+            ws.cell(row=row_num, column=4, value=format_module_name(m)).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=5, value=level_name).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=6, value=resolve_format(m)).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=7, value=m.get('estimated_participants', 0)).border = self.THIN_BORDER
+            dur_cell = ws.cell(row=row_num, column=8, value=duration)
+            dur_cell.border = self.THIN_BORDER
+            dur_cell.alignment = Alignment(horizontal='center')
+            return row_num + 1
+
+        def write_module_row_cl(row_num, m, idx):
+            level_num = m.get('target_level', 0)
+            level_name = self.LEVEL_NAMES.get(level_num, '')
+            duration = self.LEVEL_DURATION_HOURS.get(level_num, 2)
+            ws.cell(row=row_num, column=1, value=idx).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=2, value=format_module_name(m)).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=3, value=level_name).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=4, value=resolve_format(m)).border = self.THIN_BORDER
+            ws.cell(row=row_num, column=5, value=m.get('estimated_participants', 0)).border = self.THIN_BORDER
+            dur_cell = ws.cell(row=row_num, column=6, value=duration)
+            dur_cell.border = self.THIN_BORDER
+            dur_cell.alignment = Alignment(horizontal='center')
+            return row_num + 1
+
+        from itertools import groupby
+
+        def write_comp_groups_rfp(row_num, section_modules, idx_counter, write_fn):
+            sorted_by_comp = sorted(section_modules, key=lambda m: m.get('competency_id', m.get('id', 0)))
+            for _, grp_iter in groupby(sorted_by_comp, key=lambda m: m.get('competency_id', m.get('id', 0))):
+                grp = list(grp_iter)
+                comp_name = grp[0].get('competency_name', 'Unknown')
+                count = len(grp)
+                label = f"    {comp_name} ({count} sub-module{'s' if count != 1 else ''})"
+                row_num = write_section_hdr(row_num, label, COMP_HEADER_FILL, COMP_HEADER_FONT)
+                for mod in grp:
+                    idx_counter[0] += 1
+                    row_num = write_fn(row_num, mod, idx_counter[0])
+            return row_num
+
+        # Sort modules
         if view_type == 'role_clustered':
             cluster_order = {'SE for Engineers': 0, 'SE for Managers': 1, 'SE for Interfacing Partners': 2}
             sorted_modules = sorted(modules, key=lambda m: (
                 cluster_order.get(m.get('cluster_name', ''), 99),
                 m.get('subcluster') or 'z',
-                m.get('id', 0)
+                m.get('competency_id', m.get('id', 0))
             ))
-        else:
-            sorted_modules = sorted(modules, key=lambda m: m.get('id', 0))
 
-        for idx, m in enumerate(sorted_modules, 1):
-            level_name = self.LEVEL_NAMES.get(m.get('target_level', 0), '')
+            idx_counter = [0]
+            for cluster_name, cluster_iter in groupby(sorted_modules, key=lambda m: m.get('cluster_name', 'Uncategorized')):
+                cluster_mods = list(cluster_iter)
+                pkg_fill = pkg_fills.get(cluster_name, PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid'))
+                row = write_section_hdr(row, cluster_name, pkg_fill, PKG_HEADER_FONT)
 
-            col = 1
-            ws.cell(row=row, column=col, value=idx).border = self.THIN_BORDER
-            col += 1
+                if 'Engineer' in cluster_name:
+                    common_mods = [m for m in cluster_mods if m.get('subcluster') == 'common']
+                    pathway_mods = [m for m in cluster_mods if m.get('subcluster') != 'common']
 
-            if view_type == 'role_clustered':
-                ws.cell(row=row, column=col, value=m.get('cluster_name', '-')).border = self.THIN_BORDER
-                col += 1
+                    if common_mods:
+                        cb_label = f"  Common Base ({len(common_mods)} module{'s' if len(common_mods) != 1 else ''})"
+                        row = write_section_hdr(row, cb_label, SUBCLUSTER_FILL, SUBCLUSTER_FONT)
+                        row = write_comp_groups_rfp(row, common_mods, idx_counter, write_module_row_rc)
 
-                # Module type
-                subcluster = m.get('subcluster')
-                if 'Engineer' in (m.get('cluster_name') or ''):
-                    module_type = 'Common Base' if subcluster == 'common' else 'Role-Specific'
+                    if pathway_mods:
+                        rs_label = f"  Role-Specific Pathways ({len(pathway_mods)} module{'s' if len(pathway_mods) != 1 else ''})"
+                        row = write_section_hdr(row, rs_label, SUBCLUSTER_FILL, SUBCLUSTER_FONT)
+                        row = write_comp_groups_rfp(row, pathway_mods, idx_counter, write_module_row_rc)
                 else:
-                    module_type = '-'
-                type_cell = ws.cell(row=row, column=col, value=module_type)
-                type_cell.border = self.THIN_BORDER
-                if module_type == 'Common Base':
-                    type_cell.fill = self.GREEN_FILL
-                elif module_type == 'Role-Specific':
-                    type_cell.fill = self.LIGHT_FILL
-                col += 1
-
-            # Module name (include PMT type suffix if applicable)
-            pmt = m.get('pmt_type', '')
-            module_name = m.get('competency_name', '')
-            if pmt and pmt.lower() not in ['combined', '', 'null']:
-                module_name += f" ({pmt.capitalize()})"
-            ws.cell(row=row, column=col, value=module_name).border = self.THIN_BORDER
-            col += 1
-
-            ws.cell(row=row, column=col, value=level_name).border = self.THIN_BORDER
-            col += 1
-
-            # Format - try multiple possible field names and nested objects
-            selected_format = m.get('selected_format') or {}
-            format_name = (m.get('learning_format_name') or
-                          selected_format.get('format_name') or
-                          m.get('selected_format_name') or
-                          m.get('format_name') or
-                          m.get('learning_format') or '-')
-            ws.cell(row=row, column=col, value=format_name).border = self.THIN_BORDER
-            col += 1
-
-            # Participants
-            ws.cell(row=row, column=col, value=m.get('estimated_participants', 0)).border = self.THIN_BORDER
-
-            row += 1
+                    row = write_comp_groups_rfp(row, cluster_mods, idx_counter, write_module_row_rc)
+        else:
+            sorted_modules = sorted(modules, key=lambda m: m.get('competency_id', m.get('id', 0)))
+            idx_counter = [0]
+            for _, grp_iter in groupby(sorted_modules, key=lambda m: m.get('competency_id', m.get('id', 0))):
+                grp = list(grp_iter)
+                comp_name = grp[0].get('competency_name', 'Unknown')
+                count = len(grp)
+                label = f"{comp_name} ({count} sub-module{'s' if count != 1 else ''})"
+                row = write_section_hdr(row, label, COMP_HEADER_FILL, COMP_HEADER_FONT)
+                for mod in grp:
+                    idx_counter[0] += 1
+                    row = write_module_row_cl(row, mod, idx_counter[0])
 
     def _write_gaps_sheet(self, wb: Workbook, data: Dict[str, Any]):
         """Write the Gap Analysis sheet"""
@@ -1601,50 +1816,64 @@ Return ONLY a JSON array of content strings:
         ws.column_dimensions['B'].width = 20
         ws.column_dimensions['C'].width = 15
 
-    def _write_timeline_sheet(self, wb: Workbook, data: Dict[str, Any]):
-        """Write the Timeline sheet"""
-        ws = wb.create_sheet("Timeline")
+    def _write_training_schedule_sheet(self, wb: Workbook, data: Dict[str, Any]):
+        """Write the Training Schedule sheet (replaces Timeline sheet).
+
+        Builds pseudo-plan dicts from Phase 3 modules and uses AVIVA service's
+        scheduling logic to generate a bin-packed daily schedule with milestones.
+        """
+        from app.services.phase4_aviva_service import Phase4AvivaService
 
         phase3 = data.get('phase3', {})
+        modules = phase3.get('modules', [])
+        config = phase3.get('config', {})
+        view_type = config.get('selected_view', 'competency_level')
         timeline = phase3.get('timeline', {})
         milestones = timeline.get('milestones', [])
 
-        row = 1
+        # Build pseudo-plan dicts for the schedule generator
+        pseudo_plans = []
+        for m in modules:
+            level = m.get('target_level', 0)
+            duration_hours = Phase4AvivaService.LEVEL_DURATION_HOURS.get(level, 2)
+            level_name = Phase4AvivaService.LEVEL_NAMES.get(level, f'Level {level}')
+            pmt_type = m.get('pmt_type', 'combined')
 
-        # Title
-        ws.merge_cells('A1:E1')
-        ws['A1'] = 'Implementation Timeline'
-        ws['A1'].font = self.TITLE_FONT
-        ws['A1'].alignment = Alignment(horizontal='center')
-        row = 3
+            # Build module name
+            comp_name = m.get('competency_name', '')
+            if pmt_type and pmt_type.lower() not in ('combined', '', 'null', 'none'):
+                module_name = f"{comp_name} - {level_name} ({pmt_type.capitalize()})"
+            else:
+                module_name = f"{comp_name} - {level_name}"
 
-        if not milestones:
-            ws[f'A{row}'] = 'No timeline milestones defined.'
-            return
+            # Resolve format name (same logic as _write_modules_sheet)
+            selected_format = m.get('selected_format') or {}
+            learning_format = (m.get('learning_format_name') or
+                               selected_format.get('format_name') or
+                               m.get('selected_format_name') or
+                               m.get('format_name') or
+                               m.get('learning_format') or '-')
 
-        # Milestones table
-        headers = ['#', 'Milestone', 'Target Date', 'Quarter', 'Description']
-        col_widths = [4, 30, 15, 12, 50]
+            pseudo_plans.append({
+                'module_name': module_name,
+                'competency_name': comp_name,
+                'competency_id': m.get('competency_id', m.get('id', 0)),
+                'target_level': level,
+                'total_duration_minutes': duration_hours * 60,
+                'learning_format': learning_format,
+                'cluster_name': m.get('cluster_name'),
+                'subcluster': m.get('subcluster'),
+                'pmt_type': pmt_type,
+                'estimated_participants': m.get('estimated_participants', 0),
+                'roles_needing_training': m.get('roles_needing_training', []),
+            })
 
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=row, column=col, value=header)
-            cell.font = self.HEADER_FONT
-            cell.fill = self.HEADER_FILL
-            cell.border = self.THIN_BORDER
-            cell.alignment = Alignment(horizontal='center')
-            ws.column_dimensions[get_column_letter(col)].width = col_widths[col - 1]
-        row += 1
+        # Use AVIVA service's scheduling logic
+        aviva_service = Phase4AvivaService(self.db)
+        schedule_data = aviva_service._generate_daily_schedule(pseudo_plans, view_type, milestones)
 
-        for idx, m in enumerate(milestones, 1):
-            ws.cell(row=row, column=1, value=idx).border = self.THIN_BORDER
-            ws.cell(row=row, column=2, value=m.get('milestone_name', m.get('name', ''))).border = self.THIN_BORDER
-            ws.cell(row=row, column=3, value=m.get('estimated_date', '')).border = self.THIN_BORDER
-            ws.cell(row=row, column=4, value=m.get('quarter', '')).border = self.THIN_BORDER
-
-            desc_cell = ws.cell(row=row, column=5, value=m.get('milestone_description', m.get('description', '')))
-            desc_cell.border = self.THIN_BORDER
-            desc_cell.alignment = Alignment(wrap_text=True)
-            row += 1
+        ws = wb.create_sheet("Training Schedule")
+        aviva_service._write_schedule_sheet(ws, schedule_data, view_type, milestones=milestones)
 
     def _write_role_competency_sheet(self, wb: Workbook, data: Dict[str, Any]):
         """Write the Role-Competency Matrix sheet"""
@@ -1709,7 +1938,7 @@ Return ONLY a JSON array of content strings:
         # Set column widths
         ws.column_dimensions['A'].width = 30
         for col in range(2, len(role_names) + 2):
-            ws.column_dimensions[get_column_letter(col)].width = 15
+            ws.column_dimensions[get_column_letter(col)].width = 20
 
     def _write_aviva_sheet(self, wb: Workbook, data: Dict[str, Any]):
         """Write the AVIVA Plans sheet"""
@@ -1746,7 +1975,7 @@ Return ONLY a JSON array of content strings:
 
         # AVIVA headers
         aviva_headers = ['Start', 'Min', 'Type', 'AVIVA', 'What (Content)', 'How (Method)', 'Material']
-        aviva_col_widths = [8, 6, 8, 8, 50, 25, 35]
+        aviva_col_widths = [18, 8, 10, 15, 50, 25, 45]
 
         for col, width in enumerate(aviva_col_widths, 1):
             ws.column_dimensions[get_column_letter(col)].width = width
@@ -1837,7 +2066,8 @@ Return ONLY a JSON array of content strings:
     # WORD DOCUMENT EXPORT (LLM-ENHANCED)
     # =========================================================================
 
-    def export_rfp_to_word(self, organization_id: int, include_llm: bool = True) -> io.BytesIO:
+    def export_rfp_to_word(self, organization_id: int, include_llm: bool = True,
+                           module_ids: Optional[List[int]] = None) -> io.BytesIO:
         """
         Export comprehensive RFP document to Word format with LLM-generated content.
 
@@ -1848,11 +2078,16 @@ Return ONLY a JSON array of content strings:
         - Part 4: Training Module Details
 
         Uses parallel LLM generation to speed up module content creation.
+
+        Args:
+            organization_id: Organization ID
+            include_llm: Whether to use LLM for content generation
+            module_ids: Optional list of module IDs to filter (from AVIVA selection)
         """
         current_app.logger.info(f"[RFP] Starting Word export for organization {organization_id}, include_llm={include_llm}")
 
-        # Get all data
-        data = self.get_rfp_data(organization_id, include_aviva=False)
+        # Get all data (with optional module filtering)
+        data = self.get_rfp_data(organization_id, include_aviva=False, module_ids=module_ids)
         org = data.get('organization', {})
         phase3 = data.get('phase3', {})
         modules = phase3.get('modules', [])
@@ -1883,6 +2118,21 @@ Return ONLY a JSON array of content strings:
 
         # Add document sections
         self._add_title_page(doc, data)
+
+        # GenAI Disclaimer
+        disclaimer_para = doc.add_paragraph()
+        disclaimer_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        disclaimer_run = disclaimer_para.add_run(
+            "Disclaimer: This document contains content generated using Generative AI (GenAI) "
+            "and may contain inaccuracies or errors. It is intended as a reference document and "
+            "starting point. Review and modifications may be necessary to ensure accuracy and "
+            "alignment with your specific organizational requirements."
+        )
+        disclaimer_run.italic = True
+        disclaimer_run.font.size = Pt(9)
+        disclaimer_run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+        disclaimer_para.space_after = Pt(12)
+
         self._add_table_of_contents(doc)
         self._add_context_section(doc, data, include_llm)
         self._add_service_requirements_section(doc, data)
@@ -1933,6 +2183,22 @@ Return ONLY a JSON array of content strings:
             h3.font.name = 'Calibri'
             h3.font.size = Pt(12)
             h3.font.bold = True
+
+    def _add_phase_origin(self, paragraph, text: str):
+        """Add a phase origin annotation (italic, gray) to a paragraph"""
+        run = paragraph.add_run(f"  [{text}]")
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
+    def _add_intro_paragraph(self, doc: Document, text: str):
+        """Add an introductory/descriptive paragraph in slightly smaller, gray text"""
+        p = doc.add_paragraph(text)
+        for run in p.runs:
+            run.font.size = Pt(10)
+            run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+        p.space_after = Pt(6)
+        return p
 
     def _add_title_page(self, doc: Document, data: Dict[str, Any]):
         """Add title page to the document"""
@@ -1985,6 +2251,9 @@ Return ONLY a JSON array of content strings:
         # Add TOC items (simplified - Word will auto-generate if needed)
         toc_items = [
             "Context and Core Concept",
+            "    Systems Engineering Context",
+            "    Core Concept",
+            "    Qualification Strategy",
             "Service Requirements",
             "    Service Description - General",
             "    Requirements/Constraints",
@@ -2029,6 +2298,56 @@ This includes requirements engineering, architectural modelling, test specificat
             if paragraph.strip():
                 p = doc.add_paragraph(paragraph.strip())
 
+        # 1.3 Qualification Strategy
+        doc.add_heading('1.3 Qualification Strategy', level=2)
+
+        strategies = data.get('strategies', [])
+        if strategies:
+            self._add_intro_paragraph(doc,
+                "The following qualification strategies were selected during the strategic planning phase "
+                "to guide the design of the training program. Each strategy defines the approach, "
+                "target audience, and qualification depth for different segments of the organization.")
+
+            from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+            strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
+
+            for s in strategies:
+                s_name = s.get('name', '')
+                is_primary = s.get('is_primary', False)
+
+                # Strategy name heading
+                label = f"{s_name} (Primary Strategy)" if is_primary else s_name
+                p = doc.add_paragraph()
+                run = p.add_run(label)
+                run.bold = True
+                run.font.size = Pt(11)
+
+                # Description
+                desc = s.get('description', '') or strategy_detail_map.get(s_name, {}).get('description', '')
+                if desc:
+                    doc.add_paragraph(desc)
+
+                # Key details
+                detail = strategy_detail_map.get(s_name, {})
+                details_parts = []
+                if detail.get('targetAudience'):
+                    details_parts.append(f"Target Audience: {detail['targetAudience']}")
+                if detail.get('qualificationLevel'):
+                    details_parts.append(f"Qualification Level: {detail['qualificationLevel']}")
+                if detail.get('suitablePhase'):
+                    details_parts.append(f"Suitable Phase: {detail['suitablePhase']}")
+                if detail.get('duration'):
+                    details_parts.append(f"Estimated Duration: {detail['duration']}")
+                if details_parts:
+                    for dp in details_parts:
+                        bullet_p = doc.add_paragraph(dp, style='List Bullet')
+                        for r in bullet_p.runs:
+                            r.font.size = Pt(10)
+
+                doc.add_paragraph()  # Spacing between strategies
+        else:
+            doc.add_paragraph("No qualification strategy has been selected.")
+
         doc.add_page_break()
 
     def _add_service_requirements_section(self, doc: Document, data: Dict[str, Any]):
@@ -2037,6 +2356,10 @@ This includes requirements engineering, architectural modelling, test specificat
 
         # 2.1 Service Description - General
         doc.add_heading('2.1 Service Description - General', level=2)
+
+        self._add_intro_paragraph(doc,
+            "The following describes the general scope of services expected from the training provider. "
+            "These requirements apply to all training modules defined in this RFP.")
 
         general_items = [
             "Concepts for training modules for pre-defined contents; structure/modality didactically optimized.",
@@ -2052,6 +2375,10 @@ This includes requirements engineering, architectural modelling, test specificat
         # 2.2 Requirements/Constraints
         doc.add_heading('2.2 Requirements/Constraints', level=2)
 
+        self._add_intro_paragraph(doc,
+            "The following requirements and constraints were derived from the organization profile, "
+            "selected learning formats, and timeline planning defined in Phases 1-3.")
+
         requirements = self.generate_service_requirements(data)
         for req in requirements:
             p = doc.add_paragraph(req, style='List Bullet')
@@ -2061,6 +2388,11 @@ This includes requirements engineering, architectural modelling, test specificat
 
         roles = data.get('roles', [])
         target_group = data.get('target_group', {})
+
+        self._add_intro_paragraph(doc,
+            "The target group size was defined during the organization profile setup (Phase 1), "
+            "and the roles below were identified during the competency assessment (Phase 2). "
+            "Each role has been assigned to a training program cluster based on its SE competency profile.")
 
         intro = f"Total target group: {target_group.get('size', 'N/A')} employees across {len(roles)} identified roles."
         doc.add_paragraph(intro)
@@ -2109,6 +2441,12 @@ This includes requirements engineering, architectural modelling, test specificat
         # 3.1 Key Competencies
         doc.add_heading('3.1 Key Competencies', level=2)
 
+        self._add_intro_paragraph(doc,
+            "The following SE competencies were identified as requiring qualification based on the "
+            "competency gap analysis conducted in Phase 2. For each competency, the gap between "
+            "current and required competency levels was assessed across all roles, and training "
+            "modules were generated accordingly.")
+
         # Get unique competencies
         competencies = set()
         for m in modules:
@@ -2117,7 +2455,10 @@ This includes requirements engineering, architectural modelling, test specificat
                 competencies.add(comp_name)
 
         if competencies:
-            doc.add_paragraph("Key competencies for the qualification program:")
+            p = doc.add_paragraph()
+            run = p.add_run(f"{len(competencies)} key competencies")
+            run.bold = True
+            p.add_run(" are addressed in this qualification program:")
             for comp in sorted(competencies):
                 doc.add_paragraph(comp, style='List Bullet')
         else:
@@ -2126,14 +2467,45 @@ This includes requirements engineering, architectural modelling, test specificat
         # 3.2 Training Structure Overview
         doc.add_heading('3.2 Training Structure Overview', level=2)
 
-        format_dist = summary.get('format_distribution', {})
-        doc.add_paragraph(f"Total Training Modules: {len(modules)}")
-        doc.add_paragraph(f"Training View: {'Role-Clustered' if is_role_clustered else 'Competency-Level'}")
+        if is_role_clustered:
+            view_desc = (
+                "The training program uses a Role-Clustered structure, grouping modules into "
+                "three training packages based on role assignments: SE for Engineers (with Common Base "
+                "and Role-Specific Pathways), SE for Managers, and SE for Interfacing Partners. "
+                "This structure was selected in Phase 3 based on the organization's maturity level and role diversity."
+            )
+        else:
+            view_desc = (
+                "The training program uses a Competency-Level structure, grouping modules by the "
+                "16 SE competency areas. Each competency group contains sub-modules at identified "
+                "qualification levels (Knowing, Understanding, Applying, Mastering). "
+                "This structure was selected in Phase 3."
+            )
+        self._add_intro_paragraph(doc, view_desc)
 
+        # Summary statistics
+        total_duration = sum(self.LEVEL_DURATION_HOURS.get(m.get('target_level', 0), 2) for m in modules)
+        duration_display = f"{total_duration} hours"
+        if total_duration >= 8:
+            duration_display += f" (~{total_duration / 8:.1f} training days)"
+
+        p = doc.add_paragraph()
+        p.add_run("Total Training Modules: ").bold = True
+        p.add_run(str(len(modules)))
+
+        p = doc.add_paragraph()
+        p.add_run("Total Estimated Duration: ").bold = True
+        p.add_run(duration_display)
+
+        p = doc.add_paragraph()
+        p.add_run("Training View: ").bold = True
+        p.add_run('Role-Clustered' if is_role_clustered else 'Competency-Level')
+
+        format_dist = summary.get('format_distribution', {})
         if format_dist:
-            doc.add_paragraph("Format Distribution:")
-            for fmt, count in format_dist.items():
-                doc.add_paragraph(f"{fmt}: {count} modules", style='List Bullet')
+            p = doc.add_paragraph()
+            p.add_run("Format Distribution: ").bold = True
+            p.add_run(', '.join(f"{fmt}: {count}" for fmt, count in format_dist.items()))
 
         # Modules table
         if modules:
@@ -2156,13 +2528,11 @@ This includes requirements engineering, architectural modelling, test specificat
 
             # Different table structure based on view type
             if is_role_clustered:
-                # Role-clustered: Training Program, Type, Module, Level, Format, Roles, Est. Participants
-                table = doc.add_table(rows=1, cols=7)
-                headers = ['Training Program', 'Type', 'Module', 'Level', 'Format', 'Roles', 'Participants']
+                table = doc.add_table(rows=1, cols=8)
+                headers = ['Training Program', 'Type', 'Module', 'Level', 'Format', 'Roles', 'Participants', 'Duration (h)']
             else:
-                # Competency-level: Module, Level, Format, Roles, Est. Participants
-                table = doc.add_table(rows=1, cols=5)
-                headers = ['Module', 'Level', 'Format', 'Roles', 'Participants']
+                table = doc.add_table(rows=1, cols=6)
+                headers = ['Module', 'Level', 'Format', 'Roles', 'Participants', 'Duration (h)']
 
             table.style = 'Table Grid'
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -2196,6 +2566,8 @@ This includes requirements engineering, architectural modelling, test specificat
                 roles = m.get('roles_needing_training', [])
                 roles_str = ', '.join(roles) if roles and isinstance(roles, list) else '-'
 
+                duration = str(self.LEVEL_DURATION_HOURS.get(m.get('target_level', 0), 2))
+
                 if is_role_clustered:
                     # Determine module type
                     cluster_name = m.get('cluster_name', '-')
@@ -2212,15 +2584,22 @@ This includes requirements engineering, architectural modelling, test specificat
                     row_cells[4].text = format_name
                     row_cells[5].text = roles_str
                     row_cells[6].text = str(m.get('estimated_participants', 0))
+                    row_cells[7].text = duration
                 else:
                     row_cells[0].text = module_display_name
                     row_cells[1].text = level_name
                     row_cells[2].text = format_name
                     row_cells[3].text = roles_str
                     row_cells[4].text = str(m.get('estimated_participants', 0))
+                    row_cells[5].text = duration
 
         # 3.3 Timeline
         doc.add_heading('3.3 Timeline', level=2)
+
+        self._add_intro_paragraph(doc,
+            "The implementation timeline below was estimated in Phase 3 based on the organization's "
+            "maturity level, target group size, number of training modules, and selected learning formats. "
+            "It outlines the key milestones from concept development through full rollout.")
 
         milestones = timeline.get('milestones', [])
         if milestones:
@@ -2259,6 +2638,13 @@ This includes requirements engineering, architectural modelling, test specificat
         """
         doc.add_heading('Part 4: Training Module Details', level=1)
 
+        self._add_intro_paragraph(doc,
+            "This section provides detailed training module specifications including learning goals "
+            "and content outlines. Each module targets a specific SE competency at an identified "
+            "qualification level, with goals and contents generated to guide training material development. "
+            "The modules are derived from the competency gap analysis (Phase 2) and training structure "
+            "planning (Phase 3).")
+
         phase3 = data.get('phase3', {})
         modules = phase3.get('modules', [])
         pmt = data.get('pmt_context', {})
@@ -2293,14 +2679,27 @@ This includes requirements engineering, architectural modelling, test specificat
             doc.add_heading(f'{idx + 1}. {competency_name} - Level {level_name}', level=2)
 
             # Module info paragraph
-            info = f"Target Level: {level_name} | Format: {format_name}"
+            duration_hours = self.LEVEL_DURATION_HOURS.get(target_level, 2)
+            info = f"Target Level: {level_name} | Format: {format_name} | Est. Duration: {duration_hours}h"
             cluster_name = module.get('cluster_name')
             if cluster_name:
                 info += f" | Training Program: {cluster_name}"
+            participants = module.get('estimated_participants', 0)
+            if participants:
+                info += f" | Est. Participants: {participants}"
 
             info_para = doc.add_paragraph(info)
             info_para.runs[0].font.italic = True
             info_para.runs[0].font.color.rgb = self.SUBHEADER_RGB
+
+            # Roles needing training
+            module_roles = module.get('roles_needing_training', [])
+            if module_roles and isinstance(module_roles, list):
+                roles_para = doc.add_paragraph()
+                roles_run = roles_para.add_run(f"Roles: {', '.join(module_roles)}")
+                roles_run.font.italic = True
+                roles_run.font.size = Pt(10)
+                roles_run.font.color.rgb = RGBColor(0x90, 0x93, 0x99)
 
             # Check if we have pre-generated content for this module
             if pre_generated_content and idx in pre_generated_content:

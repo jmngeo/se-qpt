@@ -25,6 +25,35 @@
 
     <!-- Assessment questions -->
     <div v-else-if="!assessmentComplete" class="survey-container">
+      <!-- Guidance Info Box -->
+      <div class="info-box survey-guidance-box">
+        <div class="info-box-header">
+          <el-icon><InfoFilled /></el-icon>
+          <h4>How to Complete This Assessment</h4>
+        </div>
+        <ul class="info-points">
+          <li>
+            This self-assessment is based on the <strong>INCOSE Systems Engineering Competency Framework</strong>.
+            For each of the {{ totalQuestions }} identified competencies, you will see <strong>4 proficiency groups</strong>
+            with behavioral indicators describing what someone at that level typically does.
+          </li>
+          <li>
+            <strong>How to rate yourself:</strong> Read the indicators in each group and select the group(s)
+            that best describe your <strong>current abilities</strong>. You may select multiple groups if you
+            identify with indicators across levels. Select Group 5 if none of the descriptions apply to you.
+          </li>
+          <li>
+            <strong>Why accuracy matters:</strong> Your self-rating is compared to the required competency level
+            for your role(s). The gap between your current level and the required level determines which
+            training modules will be created in Phase 3. Honest self-assessment leads to a more effective training plan.
+          </li>
+          <li class="note">
+            Data source: Competency indicators from the INCOSE SE Competency Framework.
+            Required levels derived from the role-to-competency mapping (Phase 1).
+          </li>
+        </ul>
+      </div>
+
       <!-- Survey header - Derik's style -->
       <div class="survey-header">
         <h3>Systems Engineering Competency Assessment Survey</h3>
@@ -150,7 +179,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ArrowLeft, ArrowRight, Check } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Check, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { phase2Task2Api } from '@/api/phase2'
 import { useAuthStore } from '@/stores/auth'
@@ -535,6 +564,59 @@ const getAreaTagType = (area) => {
 
 .loading-container {
   padding: 20px;
+}
+
+/* Guidance Info Box */
+.info-box {
+  background: #F8F9FA;
+  border: 1px solid #E4E7ED;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.info-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.info-box-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.info-points {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.info-points li {
+  margin-bottom: 4px;
+}
+
+.info-points li strong {
+  color: #303133;
+}
+
+.info-points li.note {
+  color: #909399;
+  font-style: italic;
+}
+
+.survey-guidance-box {
+  background: #F0F9EB;
+  border-color: #E1F3D8;
+}
+
+.survey-guidance-box .info-box-header .el-icon {
+  color: #67C23A;
 }
 
 /* Survey container - Derik's style */

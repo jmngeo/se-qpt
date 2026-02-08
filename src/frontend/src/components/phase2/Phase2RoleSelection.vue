@@ -38,19 +38,34 @@
 
     <!-- Role selection grid -->
     <div v-else>
-      <!-- Info alert -->
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 20px;"
-      >
-        <template #title>
-          Select roles to assess competencies
-        </template>
-        Select one or more roles below. We'll calculate the necessary competencies
-        based on your selection.
-      </el-alert>
+      <!-- Guidance Info Box -->
+      <div class="info-box role-assessment-guidance-box">
+        <div class="info-box-header">
+          <el-icon><InfoFilled /></el-icon>
+          <h4>About Role-Based Assessment</h4>
+        </div>
+        <ul class="info-points">
+          <li>
+            The roles below were <strong>identified in Phase 1</strong> during the organization profile setup.
+            Each role has been mapped to standardized <strong>SE role clusters</strong> (e.g., System Engineer, Project Manager)
+            which define the required competency levels for that role.
+          </li>
+          <li>
+            <strong>Select the roles</strong> that should participate in the competency assessment.
+            The system will calculate which SE competencies are required and at what proficiency level,
+            based on the combined requirements of all selected roles.
+          </li>
+          <li>
+            After selection, you will proceed to a <strong>self-assessment survey</strong> where you rate your
+            current competency level against the role requirements. The gap between current and required levels
+            will drive the training plan in later phases.
+          </li>
+          <li class="note">
+            Data source: Organization roles from Phase 1, Task 2. Role-to-competency mapping based on
+            the INCOSE Systems Engineering Competency Framework.
+          </li>
+        </ul>
+      </div>
 
       <!-- Selection toolbar -->
       <div class="selection-toolbar">
@@ -138,7 +153,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ArrowRight, Check } from '@element-plus/icons-vue'
+import { ArrowRight, Check, InfoFilled } from '@element-plus/icons-vue'
 import { phase2Task1Api } from '@/api/phase2'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from 'vue3-toastify'
@@ -290,6 +305,59 @@ const handleBack = () => {
 
 .loading-container {
   padding: 20px;
+}
+
+/* Guidance Info Box */
+.info-box {
+  background: #F8F9FA;
+  border: 1px solid #E4E7ED;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.info-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.info-box-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.info-points {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.info-points li {
+  margin-bottom: 4px;
+}
+
+.info-points li strong {
+  color: #303133;
+}
+
+.info-points li.note {
+  color: #909399;
+  font-style: italic;
+}
+
+.role-assessment-guidance-box {
+  background: #ECF5FF;
+  border-color: #D9ECFF;
+}
+
+.role-assessment-guidance-box .info-box-header .el-icon {
+  color: #409EFF;
 }
 
 .selection-toolbar {

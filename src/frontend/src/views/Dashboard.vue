@@ -82,13 +82,18 @@
             <!-- Admin Workflow: Phase 1 Setup + Admin Competency Assessment -->
             <div v-if="authStore.isAdmin" class="admin-workflow">
               <div class="workflow-description">
-                <el-alert
-                  title="Admin Complete Journey"
-                  description="As an organizational admin, complete all phases: prepare SE training foundation (Phase 1), identify requirements and competencies (Phase 2), create macro plan (Phase 3), and develop detailed implementation (Phase 4)."
-                  type="info"
-                  :closable="false"
-                  show-icon
-                />
+                <div class="info-box admin-info-box">
+                  <div class="info-box-header">
+                    <el-icon><Setting /></el-icon>
+                    <h4>Admin Complete Journey</h4>
+                  </div>
+                  <ul class="info-points">
+                    <li><strong>Phase 1:</strong> Prepare SE training foundation - organizational maturity and role identification</li>
+                    <li><strong>Phase 2:</strong> Identify competency requirements through expert and self-assessments</li>
+                    <li><strong>Phase 3:</strong> Create macro training plan with learning formats and scheduling</li>
+                    <li><strong>Phase 4:</strong> Develop detailed micro-level implementation plans</li>
+                  </ul>
+                </div>
               </div>
 
               <div class="phases-navigation">
@@ -129,13 +134,16 @@
             <!-- Employee Workflow: Organization Context + Personal Assessments -->
             <div v-else class="employee-workflow">
               <div class="workflow-description">
-                <el-alert
-                  title="Employee Journey"
-                  description="View your organization's SE training preparation (Phase 1), then complete your personal competency self-assessment (Phase 2)."
-                  type="success"
-                  :closable="false"
-                  show-icon
-                />
+                <div class="info-box employee-info-box">
+                  <div class="info-box-header">
+                    <el-icon><UserFilled /></el-icon>
+                    <h4>Employee Journey</h4>
+                  </div>
+                  <ul class="info-points">
+                    <li><strong>Phase 1:</strong> View your organization's SE maturity assessment and training strategy</li>
+                    <li><strong>Phase 2:</strong> Complete your personal competency self-assessment and view results</li>
+                  </ul>
+                </div>
               </div>
 
               <div class="phases-navigation">
@@ -529,6 +537,70 @@ onMounted(() => {
 
 .workflow-description {
   margin-bottom: 24px;
+}
+
+/* Info Box (Phase 3 style) */
+.info-box {
+  background: #F8F9FA;
+  border: 1px solid #E4E7ED;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.info-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.info-box-header .el-icon {
+  font-size: 16px;
+}
+
+.info-box-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.admin-info-box {
+  background: #ECF5FF;
+  border-color: #D9ECFF;
+}
+
+.admin-info-box .info-box-header .el-icon {
+  color: #409EFF;
+}
+
+.employee-info-box {
+  background: #F0F9EB;
+  border-color: #E1F3D8;
+}
+
+.employee-info-box .info-box-header .el-icon {
+  color: #67C23A;
+}
+
+.info-points {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.info-points li {
+  margin-bottom: 4px;
+}
+
+.info-points li:last-child {
+  margin-bottom: 0;
+}
+
+.info-points li strong {
+  color: #303133;
 }
 
 .phases-navigation {

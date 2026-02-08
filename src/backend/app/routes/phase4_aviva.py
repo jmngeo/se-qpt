@@ -150,7 +150,7 @@ def get_aviva_modules(organization_id):
                 elif m.get('subcluster') == 'pathway':
                     cluster_stats[cluster_id]['pathway_count'] += 1
 
-        return jsonify({
+        response = {
             'success': True,
             'modules': modules,
             'view_type': view_type,
@@ -162,7 +162,14 @@ def get_aviva_modules(organization_id):
                 'modules_pending': total_modules - modules_with_aviva
             },
             'cluster_stats': list(cluster_stats.values()) if cluster_stats else None
-        })
+        }
+
+        # Pass through Level 1 consolidation metadata
+        if result.get('level1_consolidated'):
+            response['level1_consolidated'] = True
+            response['level1_modules_removed'] = result.get('level1_modules_removed', 0)
+
+        return jsonify(response)
 
     except Exception as e:
         current_app.logger.error(f"Error getting AVIVA modules: {e}")
@@ -761,6 +768,7 @@ def export_rfp():
         organization_id = data.get('organization_id')
         include_aviva = data.get('include_aviva', True)
         save_record = data.get('save_record', True)
+        module_ids = data.get('module_ids')  # Optional: filter to AVIVA-selected modules
 
         if not organization_id:
             return jsonify({
@@ -768,10 +776,12 @@ def export_rfp():
                 'error': 'organization_id is required'
             }), 400
 
-        current_app.logger.info(f"[RFP] Starting export for org {organization_id}, include_aviva={include_aviva}")
+        current_app.logger.info(f"[RFP] Starting export for org {organization_id}, include_aviva={include_aviva}"
+                                f", module_ids={'%d selected' % len(module_ids) if module_ids else 'all'}")
 
-        # Generate Excel
-        excel_buffer = service.export_rfp_to_excel(organization_id, include_aviva=include_aviva)
+        # Generate Excel (with optional module filtering)
+        excel_buffer = service.export_rfp_to_excel(organization_id, include_aviva=include_aviva,
+                                                   module_ids=module_ids)
 
         # Save export record
         if save_record:
@@ -886,6 +896,7 @@ def export_rfp_word():
 
         organization_id = data.get('organization_id')
         include_llm = data.get('include_llm', True)
+        module_ids = data.get('module_ids')  # Optional: filter to AVIVA-selected modules
 
         if not organization_id:
             return jsonify({
@@ -893,10 +904,12 @@ def export_rfp_word():
                 'error': 'organization_id is required'
             }), 400
 
-        current_app.logger.info(f"[RFP] Starting Word export for org {organization_id}, include_llm={include_llm}")
+        current_app.logger.info(f"[RFP] Starting Word export for org {organization_id}, include_llm={include_llm}"
+                                f", module_ids={'%d selected' % len(module_ids) if module_ids else 'all'}")
 
-        # Generate Word document (may take time for LLM)
-        word_buffer = service.export_rfp_to_word(organization_id, include_llm=include_llm)
+        # Generate Word document (may take time for LLM), with optional module filtering
+        word_buffer = service.export_rfp_to_word(organization_id, include_llm=include_llm,
+                                                 module_ids=module_ids)
 
         # Save export record
         service.save_export_record(

@@ -7,6 +7,34 @@
       </div>
     </template>
 
+    <!-- Guidance Info Box -->
+    <div class="info-box task-assessment-guidance-box">
+      <div class="info-box-header">
+        <el-icon><InfoFilled /></el-icon>
+        <h4>About Task-Based Assessment</h4>
+      </div>
+      <ul class="info-points">
+        <li>
+          In this step, you describe your <strong>daily tasks and responsibilities</strong> across three categories.
+          An AI model analyzes your descriptions and maps them to <strong>ISO 15288 systems engineering processes</strong>,
+          determining which SE processes you are involved in and at what level of involvement (Responsible, Supporting, or Designing).
+        </li>
+        <li>
+          <strong>Why this matters:</strong> The identified processes determine which of the 16 SE competencies you need
+          to be assessed on. Detailed, specific task descriptions lead to more accurate competency identification
+          and a more meaningful assessment.
+        </li>
+        <li>
+          After the analysis, you can <strong>review and edit</strong> the identified processes before proceeding
+          to the competency self-assessment survey.
+        </li>
+        <li class="note">
+          Data flow: Your task descriptions (this step) &rarr; AI-identified ISO processes &rarr;
+          Competency requirements (next step) &rarr; Self-assessment survey.
+        </li>
+      </ul>
+    </div>
+
     <div class="task-form">
       <!-- Tasks Responsible For -->
       <div class="form-group">
@@ -239,7 +267,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Edit, Refresh, Plus, Search } from '@element-plus/icons-vue'
+import { Edit, Refresh, Plus, Search, InfoFilled, Aim, Document as DocumentIcon } from '@element-plus/icons-vue'
 
 const props = defineProps({
   organizationId: {
@@ -650,6 +678,59 @@ const confirmSelection = async () => {
   color: #606266;
   font-size: 14px;
   margin: 0;
+}
+
+/* Guidance Info Box */
+.info-box {
+  background: #F8F9FA;
+  border: 1px solid #E4E7ED;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.info-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.info-box-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.info-points {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.info-points li {
+  margin-bottom: 4px;
+}
+
+.info-points li strong {
+  color: #303133;
+}
+
+.info-points li.note {
+  color: #909399;
+  font-style: italic;
+}
+
+.task-assessment-guidance-box {
+  background: #ECF5FF;
+  border-color: #D9ECFF;
+}
+
+.task-assessment-guidance-box .info-box-header .el-icon {
+  color: #409EFF;
 }
 
 .task-form {

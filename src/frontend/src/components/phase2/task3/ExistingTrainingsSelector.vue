@@ -13,20 +13,16 @@
     </template>
 
     <!-- Info Banner -->
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
-      class="info-alert"
-    >
-      <template #title>
-        2-Step Existing Training Check
-      </template>
-      <p class="alert-description">
-        <strong>Step 1:</strong> Select competencies for which your organization already has training programs.<br>
-        <strong>Step 2:</strong> For each selected competency, specify which levels are covered by the existing training.
-      </p>
-    </el-alert>
+    <div class="info-box">
+      <div class="info-box-header">
+        <el-icon><InfoFilled /></el-icon>
+        <h4>2-Step Existing Training Check</h4>
+      </div>
+      <ul class="info-points">
+        <li><strong>Step 1:</strong> Select competencies for which your organization already has training programs.</li>
+        <li><strong>Step 2:</strong> For each selected competency, specify which levels are covered by the existing training.</li>
+      </ul>
+    </div>
 
     <!-- Step 1: Competency Selection Grid -->
     <div class="section-header">
@@ -307,15 +303,52 @@ onMounted(fetchData)
   color: #303133;
 }
 
-.info-alert {
+/* Info Box (Phase 3 style) */
+.info-box {
+  background: #ECF5FF;
+  border: 1px solid #D9ECFF;
+  border-radius: 8px;
+  padding: 12px 16px;
   margin-bottom: 20px;
 }
 
-.alert-description {
-  margin: 8px 0 0 0;
-  font-size: 14px;
-  line-height: 1.6;
+.info-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.info-box-header .el-icon {
+  font-size: 16px;
+  color: #409EFF;
+}
+
+.info-box-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.info-points {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
   color: #606266;
+  line-height: 1.6;
+}
+
+.info-points li {
+  margin-bottom: 4px;
+}
+
+.info-points li:last-child {
+  margin-bottom: 0;
+}
+
+.info-points li strong {
+  color: #303133;
 }
 
 .section-header {

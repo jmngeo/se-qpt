@@ -2198,13 +2198,13 @@ def find_processes():
                         involvement = llm_process_map.get(process_name, "Not performing")
 
                         # Map involvement to numeric value
-                        # CRITICAL: These values multiply with process_competency_value (1,2,3)
+                        # CRITICAL: These values multiply with process_competency_value (0,1,2)
                         # Valid results must match stored procedure CASE: {0,1,2,3,4,6}
-                        # Designing(3) * Apply(3) = 9 is not handled, but Designing(3) * Understand(2) = 6 is valid
+                        # Designing(3) * Understand(2) = 6 -> beherrschen (master level)
                         involvement_values = {
                             "Responsible": 2,
                             "Supporting": 1,
-                            "Designing": 4,  # FIXED: Must be 4 to match database CHECK constraint
+                            "Designing": 3,  # Must be 3 to match Derik's implementation
                             "Not performing": 0
                         }
                         role_process_value = involvement_values.get(involvement, 0)
@@ -2473,7 +2473,7 @@ def update_process_selection():
         involvement_values = {
             "Responsible": 2,
             "Supporting": 1,
-            "Designing": 4,
+            "Designing": 3,  # Must be 3 to match Derik's implementation
             "Not performing": 0
         }
 

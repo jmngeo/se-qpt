@@ -582,38 +582,36 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-/* Task Cards - Matching Phase 1 card styling */
+/* Task Cards - Matching Phase 4 card styling */
 .task-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 24px;
   margin-bottom: 32px;
 }
 
 .task-card {
-  padding: 24px;
   background: white;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
+  border-radius: 12px;
+  padding: 24px;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 2px solid transparent;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .task-card:hover:not(.disabled) {
-  border-color: #26A69A;
-  box-shadow: 0 4px 16px rgba(0, 137, 123, 0.15);
-  transform: translateY(-2px);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .task-card.active {
   border-color: #26A69A;
-  background: linear-gradient(135deg, #E0F2F1 0%, #B2DFDB 100%);
 }
 
 .task-card.completed {
   border-color: #67C23A;
-  background: linear-gradient(135deg, #F0F9EB 0%, #E1F3D8 100%);
+  background: linear-gradient(135deg, #f0f9eb 0%, #e1f3d8 100%);
 }
 
 .task-card.disabled {
@@ -622,20 +620,15 @@ onMounted(async () => {
 }
 
 .task-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 8px;
-  background: #f8f9fa;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  background: #f5f7fa;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-  color: #6c757d;
-}
-
-.task-card.active .task-icon {
-  background: linear-gradient(135deg, #26A69A 0%, #00897B 100%);
-  color: white;
+  color: #26A69A;
 }
 
 .task-card.completed .task-icon {
@@ -645,15 +638,13 @@ onMounted(async () => {
 
 .task-content h3 {
   margin: 0 0 8px 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #2c3e50;
+  color: #303133;
 }
 
 .task-content p {
-  margin: 0 0 12px 0;
-  font-size: 13px;
-  color: #6c757d;
+  margin: 0 0 16px 0;
+  color: #606266;
+  font-size: 14px;
 }
 
 .task-status {
@@ -661,11 +652,12 @@ onMounted(async () => {
 }
 
 .task-result {
-  font-size: 12px;
-  color: #6c757d;
-  padding: 8px;
-  background: #f8f9fa;
-  border-radius: 4px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #606266;
 }
 
 /* Phase Complete Banner */

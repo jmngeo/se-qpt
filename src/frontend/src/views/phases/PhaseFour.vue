@@ -6,7 +6,7 @@
         <div class="phase-number">4</div>
         <div class="phase-title">
           <h1>Phase 4: Micro Planning</h1>
-          <p>AVIVA Didactics Planning</p>
+          <p>AVIVA Didactic Plans &amp; RFP Document Export</p>
         </div>
       </div>
 
@@ -104,6 +104,34 @@
           <h2>AVIVA Didactics Planning</h2>
         </div>
 
+        <!-- AVIVA Guidance -->
+        <div class="info-box aviva-guidance-box">
+          <div class="info-box-header">
+            <el-icon><InfoFilled /></el-icon>
+            <h4>What is AVIVA?</h4>
+          </div>
+          <ul class="info-points">
+            <li>
+              <strong>AVIVA</strong> is a didactic model for structuring training sessions:
+              <strong>A</strong>nkommen (Arrival) &rarr;
+              <strong>V</strong>orwissen aktivieren (Activate Prior Knowledge) &rarr;
+              <strong>I</strong>nformieren (Inform) &rarr;
+              <strong>V</strong>erarbeiten (Process) &rarr;
+              <strong>A</strong>uswerten (Evaluate).
+            </li>
+            <li>
+              Below are the training modules defined in Phase 3. You can select which modules
+              to include, then generate detailed session plans as a <strong>template</strong>
+              (with placeholder content for manual completion) or using <strong>GenAI</strong>
+              (with AI-generated content for each activity).
+            </li>
+            <li class="note">
+              Data source: Training modules, learning formats, and participant estimates from Phase 3.
+              Learning objectives and content topics from Phase 2.
+            </li>
+          </ul>
+        </div>
+
         <!-- No Modules Message -->
         <div v-if="modules.length === 0" class="no-modules">
           <el-empty description="No training modules available">
@@ -154,6 +182,25 @@
                 </li>
               </ul>
             </div>
+
+            <!-- Module Consolidation Note (only for role-clustered view) -->
+            <div v-if="viewType === 'role_clustered' && level1Consolidated" class="info-box consolidation-info-box">
+              <div class="info-box-header">
+                <el-icon><Connection /></el-icon>
+                <h4>Module Consolidation</h4>
+              </div>
+              <ul class="info-points">
+                <li>
+                  <strong>{{ level1ModulesRemoved }} Knowing-level (Level 1) module(s)</strong> have been consolidated.
+                  When a higher competency level (Understanding, Applying, or Mastering) is required for a competency,
+                  the Knowing level is automatically covered and does not require a separate training module.
+                </li>
+                <li class="note">
+                  This consolidation applies only to the role-clustered training structure to reduce redundant modules.
+                  The original Learning Objectives remain unchanged.
+                </li>
+              </ul>
+            </div>
           </div>
 
           <!-- Stats Bar -->
@@ -181,6 +228,58 @@
             </div>
           </div>
 
+          <!-- Package Overview Cards (Role-Clustered) -->
+          <div v-if="viewType === 'role_clustered'" class="package-overview-cards">
+            <div
+              v-for="card in packageOverviewCards"
+              :key="`overview_${card.id}`"
+              class="overview-card"
+              :class="getPackageClass(card.id)"
+              @click="togglePackageExpand(card.id)"
+            >
+              <div class="overview-card-header">
+                <el-checkbox
+                  :model-value="isPackageFullySelected(card.id)"
+                  :indeterminate="isPackagePartiallySelected(card.id)"
+                  @change="togglePackageSelection(card.id)"
+                  @click.stop
+                  size="large"
+                />
+                <span class="overview-card-name">{{ card.name }}</span>
+                <el-icon class="overview-expand-icon" :class="{ 'is-expanded': expandedPackages.has(card.id) }">
+                  <ArrowRight />
+                </el-icon>
+              </div>
+              <div class="overview-card-stats">
+                <div class="overview-stat">
+                  <span class="overview-stat-value">{{ card.courseCount }}</span>
+                  <span class="overview-stat-label">Courses</span>
+                </div>
+                <div class="overview-stat">
+                  <span class="overview-stat-value">{{ card.selectedCount }}/{{ card.moduleCount }}</span>
+                  <span class="overview-stat-label">Modules</span>
+                </div>
+                <div class="overview-stat">
+                  <span class="overview-stat-value">{{ card.totalDuration }}h</span>
+                  <span class="overview-stat-label">Duration</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Competency Overview Bar (Competency-Level View) -->
+          <div v-else class="competency-overview-bar">
+            <el-checkbox
+              :model-value="allModulesSelected"
+              :indeterminate="someModulesSelected"
+              @change="toggleAllModules"
+            />
+            <span class="overview-bar-text">
+              <strong>{{ selectedModuleCount }}/{{ modules.length }}</strong> modules selected
+              across <strong>{{ uniqueCompetencyCount }}</strong> competency topics
+            </span>
+          </div>
+
           <!-- Training Packages View (Role-Clustered) -->
           <div v-if="viewType === 'role_clustered'" class="training-packages-view">
             <div
@@ -190,7 +289,17 @@
               :class="getPackageClass(pkg.id)"
             >
               <!-- Package Header -->
-              <div class="package-header" :class="getPackageHeaderClass(pkg.id)">
+              <div class="package-header" :class="getPackageHeaderClass(pkg.id)" @click="togglePackageExpand(pkg.id)">
+                <el-checkbox
+                  :model-value="isPackageFullySelected(pkg.id)"
+                  :indeterminate="isPackagePartiallySelected(pkg.id)"
+                  @change="togglePackageSelection(pkg.id)"
+                  @click.stop
+                  size="large"
+                />
+                <el-icon class="package-expand-icon" :class="{ 'is-expanded': expandedPackages.has(pkg.id) }">
+                  <ArrowRight />
+                </el-icon>
                 <div class="package-icon">
                   <el-icon :size="32"><Suitcase /></el-icon>
                 </div>
@@ -209,6 +318,10 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Collapsible Package Body -->
+              <el-collapse-transition>
+                <div v-show="expandedPackages.has(pkg.id)" class="package-body">
 
               <!-- Roles included in this package -->
               <div class="package-roles">
@@ -238,6 +351,12 @@
                     <template v-for="compGroup in pkg.commonCompetencies" :key="`common_${compGroup.competency_id}`">
                       <div class="module-group">
                         <div class="module-group-header" @click="toggleNestedCompetency(`common_${pkg.id}_${compGroup.competency_id}`)">
+                          <el-checkbox
+                            :model-value="isNestedCompFullySelected(`common_${pkg.id}_${compGroup.competency_id}`)"
+                            :indeterminate="isNestedCompPartiallySelected(`common_${pkg.id}_${compGroup.competency_id}`)"
+                            @change="toggleNestedCompetencySelection(`common_${pkg.id}_${compGroup.competency_id}`)"
+                            @click.stop
+                          />
                           <el-icon class="expand-icon" :class="{ 'is-expanded': expandedNestedCompetencies.has(`common_${pkg.id}_${compGroup.competency_id}`) }">
                             <ArrowRight />
                           </el-icon>
@@ -259,6 +378,12 @@
                               class="module-item"
                               @click="showModuleDetails(module)"
                             >
+                              <el-checkbox
+                                :model-value="selectedModuleIds.has(module.id)"
+                                @change="toggleModuleSelection(module.id)"
+                                @click.stop
+                                size="small"
+                              />
                               <div class="module-main">
                                 <span class="level-badge" :class="`l${module.target_level}`">{{ getLevelName(module.target_level) }}</span>
                                 <span v-if="module.pmt_type !== 'combined'" class="pmt-badge">{{ formatPmtType(module.pmt_type) }}</span>
@@ -289,6 +414,12 @@
                     <template v-for="compGroup in pkg.pathwayCompetencies" :key="`pathway_${compGroup.competency_id}`">
                       <div class="module-group">
                         <div class="module-group-header" @click="toggleNestedCompetency(`pathway_${pkg.id}_${compGroup.competency_id}`)">
+                          <el-checkbox
+                            :model-value="isNestedCompFullySelected(`pathway_${pkg.id}_${compGroup.competency_id}`)"
+                            :indeterminate="isNestedCompPartiallySelected(`pathway_${pkg.id}_${compGroup.competency_id}`)"
+                            @change="toggleNestedCompetencySelection(`pathway_${pkg.id}_${compGroup.competency_id}`)"
+                            @click.stop
+                          />
                           <el-icon class="expand-icon" :class="{ 'is-expanded': expandedNestedCompetencies.has(`pathway_${pkg.id}_${compGroup.competency_id}`) }">
                             <ArrowRight />
                           </el-icon>
@@ -310,6 +441,12 @@
                               class="module-item"
                               @click="showModuleDetails(module)"
                             >
+                              <el-checkbox
+                                :model-value="selectedModuleIds.has(module.id)"
+                                @change="toggleModuleSelection(module.id)"
+                                @click.stop
+                                size="small"
+                              />
                               <div class="module-main">
                                 <span class="level-badge" :class="`l${module.target_level}`">{{ getLevelName(module.target_level) }}</span>
                                 <span v-if="module.pmt_type !== 'combined'" class="pmt-badge">{{ formatPmtType(module.pmt_type) }}</span>
@@ -345,6 +482,12 @@
                     class="module-group"
                   >
                     <div class="module-group-header" @click="toggleNestedCompetency(`${pkg.id}_${compGroup.competency_id}`)">
+                      <el-checkbox
+                        :model-value="isNestedCompFullySelected(`${pkg.id}_${compGroup.competency_id}`)"
+                        :indeterminate="isNestedCompPartiallySelected(`${pkg.id}_${compGroup.competency_id}`)"
+                        @change="toggleNestedCompetencySelection(`${pkg.id}_${compGroup.competency_id}`)"
+                        @click.stop
+                      />
                       <el-icon class="expand-icon" :class="{ 'is-expanded': expandedNestedCompetencies.has(`${pkg.id}_${compGroup.competency_id}`) }">
                         <ArrowRight />
                       </el-icon>
@@ -366,6 +509,12 @@
                           class="module-item"
                           @click="showModuleDetails(module)"
                         >
+                          <el-checkbox
+                            :model-value="selectedModuleIds.has(module.id)"
+                            @change="toggleModuleSelection(module.id)"
+                            @click.stop
+                            size="small"
+                          />
                           <div class="module-main">
                             <span class="level-badge" :class="`l${module.target_level}`">{{ getLevelName(module.target_level) }}</span>
                             <span v-if="module.pmt_type !== 'combined'" class="pmt-badge">{{ formatPmtType(module.pmt_type) }}</span>
@@ -382,6 +531,9 @@
                   </div>
                 </div>
               </template>
+
+                </div><!-- /.package-body -->
+              </el-collapse-transition>
             </div>
           </div>
 
@@ -393,6 +545,12 @@
               class="module-group"
             >
               <div class="module-group-header" @click="toggleCompetency(group.competency_id)">
+                <el-checkbox
+                  :model-value="isCompetencyFullySelected(group.competency_id)"
+                  :indeterminate="isCompetencyPartiallySelected(group.competency_id)"
+                  @change="toggleCompetencySelection(group.competency_id)"
+                  @click.stop
+                />
                 <el-icon class="expand-icon" :class="{ 'is-expanded': expandedCompetencies.has(group.competency_id) }">
                   <ArrowRight />
                 </el-icon>
@@ -414,6 +572,12 @@
                     class="module-item"
                     @click="showModuleDetails(module)"
                   >
+                    <el-checkbox
+                      :model-value="selectedModuleIds.has(module.id)"
+                      @change="toggleModuleSelection(module.id)"
+                      @click.stop
+                      size="small"
+                    />
                     <div class="module-main">
                       <span class="level-badge" :class="`l${module.target_level}`">{{ getLevelName(module.target_level) }}</span>
                       <span v-if="module.pmt_type !== 'combined'" class="pmt-badge">{{ formatPmtType(module.pmt_type) }}</span>
@@ -437,17 +601,17 @@
                 <el-icon class="export-icon"><Download /></el-icon>
                 <div>
                   <h3>Export AVIVA Plans</h3>
-                  <p class="export-subtitle">Generate didactic plans for all training modules</p>
+                  <p class="export-subtitle">Generate didactic plans for {{ selectedModuleCount }} selected module(s)</p>
                 </div>
               </div>
               <div class="export-stats">
                 <div class="stat-pill">
-                  <span class="stat-number">{{ modules.length }}</span>
-                  <span class="stat-label">Modules</span>
+                  <span class="stat-number">{{ selectedModuleCount }}</span>
+                  <span class="stat-label">Selected</span>
                 </div>
                 <div class="stat-pill">
-                  <span class="stat-number">{{ statistics.total_duration_hours }}h</span>
-                  <span class="stat-label">Duration</span>
+                  <span class="stat-number">{{ modules.length }}</span>
+                  <span class="stat-label">Total</span>
                 </div>
               </div>
             </div>
@@ -493,7 +657,7 @@
                   type="primary"
                   size="large"
                   :loading="generating"
-                  :disabled="modules.length === 0"
+                  :disabled="selectedModuleIds.size === 0"
                   class="export-button"
                   @click="generateAndExport"
                 >
@@ -503,6 +667,21 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Navigation to Task 2 -->
+        <div class="task-navigation">
+          <el-button
+            type="primary"
+            size="large"
+            @click="setActiveTask('rfp')"
+          >
+            Continue to Task 2: RFP Export
+            <el-icon><ArrowRight /></el-icon>
+          </el-button>
+          <span class="nav-hint" v-if="selectedModuleIds.size > 0">
+            {{ selectedModuleIds.size }} module{{ selectedModuleIds.size !== 1 ? 's' : '' }} selected for export
+          </span>
         </div>
 
       </div>
@@ -515,7 +694,50 @@
             <el-icon><ArrowLeft /></el-icon>
             Back to Overview
           </el-button>
+          <el-divider direction="vertical" />
+          <el-button @click="setActiveTask('aviva')" text type="primary">
+            <el-icon><ArrowLeft /></el-icon>
+            Task 1: AVIVA
+          </el-button>
           <h2>RFP Document Export</h2>
+        </div>
+
+        <!-- RFP Guidance -->
+        <div class="info-box rfp-guidance-box">
+          <div class="info-box-header">
+            <el-icon><InfoFilled /></el-icon>
+            <h4>About the RFP Export</h4>
+          </div>
+          <ul class="info-points">
+            <li>
+              A <strong>Request for Proposal (RFP)</strong> is a formal document used to solicit proposals from
+              external training providers. It describes what qualification services your organization needs,
+              so providers can respond with tailored offerings and pricing.
+            </li>
+            <li>
+              This document <strong>consolidates data from all previous phases</strong> into one comprehensive export:
+              <strong>Phase 1</strong> (organization profile, SE maturity level, target group size, qualification strategies),
+              <strong>Phase 2</strong> (competency gaps, role assessments, learning objectives),
+              <strong>Phase 3</strong> (training modules, learning formats, participant estimates, timeline), and
+              <strong>Phase 4</strong> (AVIVA didactic plans, daily training schedule).
+            </li>
+            <li>
+              You can choose to include <strong>all training modules</strong> defined in Phase 3, or only the
+              <strong>modules you selected in Task 1 (AVIVA Didactics)</strong>.
+              <span v-if="selectedModuleIds.size > 0 && selectedModuleIds.size < modules.length">
+                Currently <strong>{{ selectedModuleIds.size }} of {{ modules.length }} modules</strong> are selected in AVIVA.
+              </span>
+            </li>
+            <li>
+              Choose <strong>Excel</strong> for structured data tables (summary, maturity assessment, roles, training modules, schedule),
+              or <strong>Word</strong> for an AI-generated narrative document with detailed module descriptions,
+              core concepts, and learning goals suitable for sending to training providers.
+            </li>
+            <li class="note">
+              The Word document uses GenAI to generate content descriptions and may require review.
+              Both exports include a disclaimer noting AI-generated content.
+            </li>
+          </ul>
         </div>
 
         <!-- Loading State -->
@@ -561,11 +783,14 @@
               </div>
               <div class="card-body">
                 <div v-if="rfpData?.strategies?.length">
-                  <div v-for="strategy in rfpData.strategies" :key="strategy.id" class="strategy-item">
-                    <el-tag :type="strategy.is_primary ? 'primary' : 'info'" effect="plain">
-                      {{ strategy.is_primary ? 'Primary' : 'Secondary' }}
-                    </el-tag>
-                    <span>{{ strategy.name }}</span>
+                  <div v-for="strategy in rfpData.strategies" :key="strategy.id" class="strategy-item-block">
+                    <div class="strategy-item-header">
+                      <el-tag :type="strategy.is_primary ? 'primary' : 'info'" effect="plain">
+                        {{ strategy.is_primary ? 'Primary' : 'Secondary' }}
+                      </el-tag>
+                      <span class="strategy-name">{{ strategy.name }}</span>
+                    </div>
+                    <p v-if="strategy.description" class="strategy-description">{{ strategy.description }}</p>
                   </div>
                 </div>
                 <div v-else class="no-data">No strategy selected</div>
@@ -667,13 +892,26 @@
                   <span class="stat-label">Roles</span>
                 </div>
                 <div class="stat-pill">
-                  <span class="stat-number">{{ rfpData?.phase3?.summary?.total_modules || 0 }}</span>
+                  <span class="stat-number">{{ rfpModuleScope === 'all' ? (rfpData?.phase3?.summary?.total_modules || modules.length) : selectedModuleIds.size }}</span>
                   <span class="stat-label">Modules</span>
                 </div>
               </div>
             </div>
 
             <div class="export-panel-body compact">
+              <!-- Module Scope Selection -->
+              <div class="module-scope-row">
+                <span class="scope-label">Modules to include:</span>
+                <el-radio-group v-model="rfpModuleScope" size="default">
+                  <el-radio value="all">
+                    All Phase 3 modules ({{ rfpData?.phase3?.summary?.total_modules || modules.length }})
+                  </el-radio>
+                  <el-radio value="aviva_selected" :disabled="selectedModuleIds.size === 0">
+                    Only AVIVA-selected modules ({{ selectedModuleIds.size }} of {{ modules.length }})
+                  </el-radio>
+                </el-radio-group>
+              </div>
+
               <!-- Format Selection - Single Row -->
               <div class="format-row">
                 <div
@@ -879,10 +1117,16 @@ const statistics = ref({
   total_duration_hours: 0
 })
 const generationMethod = ref('template')
+const level1Consolidated = ref(false)
+const level1ModulesRemoved = ref(0)
 
 // UI State
 const expandedCompetencies = ref(new Set())
 const expandedNestedCompetencies = ref(new Set())
+
+// Selection State
+const selectedModuleIds = ref(new Set())
+const expandedPackages = ref(new Set())
 
 // RFP Export State
 const rfpLoading = ref(false)
@@ -890,6 +1134,7 @@ const rfpExporting = ref(false)
 const rfpData = ref(null)
 const expandedRfpSections = ref(new Set(['roles']))
 const rfpExportFormat = ref('excel')  // 'excel' | 'word' | 'pdf'
+const rfpModuleScope = ref('all')  // 'all' = all Phase 3 modules, 'aviva_selected' = only AVIVA-selected
 
 // Details dialog
 const showDetailsDialog = ref(false)
@@ -956,6 +1201,204 @@ const uniqueRolesCount = computed(() => {
   })
   return allRoles.size
 })
+
+// Selection computed properties
+const allModuleIds = computed(() => {
+  return new Set(modules.value.map(m => m.id).filter(Boolean))
+})
+
+const selectedModuleCount = computed(() => {
+  return selectedModuleIds.value.size
+})
+
+const allModulesSelected = computed(() => {
+  return allModuleIds.value.size > 0 && selectedModuleIds.value.size === allModuleIds.value.size
+})
+
+const someModulesSelected = computed(() => {
+  return selectedModuleIds.value.size > 0 && selectedModuleIds.value.size < allModuleIds.value.size
+})
+
+const uniqueCompetencyCount = computed(() => {
+  const ids = new Set()
+  modules.value.forEach(m => { if (m.competency_id) ids.add(m.competency_id) })
+  return ids.size
+})
+
+// Package overview cards for role-clustered view
+const packageOverviewCards = computed(() => {
+  if (viewType.value !== 'role_clustered') return []
+  return trainingPackages.value.map(pkg => {
+    const pkgModuleIds = pkg.modules ? pkg.modules.map(m => m.id).filter(Boolean) : []
+    const selectedCount = pkgModuleIds.filter(id => selectedModuleIds.value.has(id)).length
+    const uniqueComps = new Set()
+    if (pkg.competencies) pkg.competencies.forEach(c => uniqueComps.add(c.competency_id))
+    return {
+      id: pkg.id,
+      name: pkg.cluster_name,
+      courseCount: uniqueComps.size,
+      moduleCount: pkg.moduleCount,
+      selectedCount,
+      totalDuration: pkg.totalDuration
+    }
+  })
+})
+
+// Selection helper functions
+const getPackageModuleIds = (pkgId) => {
+  const pkg = trainingPackages.value.find(p => p.id === pkgId)
+  if (!pkg) return []
+  // Get IDs from the competencies' modules (which are the actual module objects)
+  const ids = []
+  if (pkg.hasSubclusters) {
+    pkg.commonCompetencies.forEach(c => c.modules.forEach(m => { if (m.id) ids.push(m.id) }))
+    pkg.pathwayCompetencies.forEach(c => c.modules.forEach(m => { if (m.id) ids.push(m.id) }))
+  } else {
+    pkg.competencies.forEach(c => c.modules.forEach(m => { if (m.id) ids.push(m.id) }))
+  }
+  return ids
+}
+
+const isPackageFullySelected = (pkgId) => {
+  const ids = getPackageModuleIds(pkgId)
+  return ids.length > 0 && ids.every(id => selectedModuleIds.value.has(id))
+}
+
+const isPackagePartiallySelected = (pkgId) => {
+  const ids = getPackageModuleIds(pkgId)
+  const selected = ids.filter(id => selectedModuleIds.value.has(id))
+  return selected.length > 0 && selected.length < ids.length
+}
+
+const getCompetencyModuleIds = (competencyId) => {
+  const group = competencyGroups.value.find(g => g.competency_id === competencyId)
+  if (!group) return []
+  return group.modules.map(m => m.id).filter(Boolean)
+}
+
+const isCompetencyFullySelected = (competencyId) => {
+  const ids = getCompetencyModuleIds(competencyId)
+  return ids.length > 0 && ids.every(id => selectedModuleIds.value.has(id))
+}
+
+const isCompetencyPartiallySelected = (competencyId) => {
+  const ids = getCompetencyModuleIds(competencyId)
+  const selected = ids.filter(id => selectedModuleIds.value.has(id))
+  return selected.length > 0 && selected.length < ids.length
+}
+
+// For nested competency groups in role-clustered view
+const getNestedCompetencyModuleIds = (key) => {
+  // key format: "common_1_5", "pathway_1_14", "2_5", etc.
+  // We need to find the matching competency group in training packages
+  for (const pkg of trainingPackages.value) {
+    if (pkg.hasSubclusters) {
+      for (const comp of pkg.commonCompetencies) {
+        if (`common_${pkg.id}_${comp.competency_id}` === key) {
+          return comp.modules.map(m => m.id).filter(Boolean)
+        }
+      }
+      for (const comp of pkg.pathwayCompetencies) {
+        if (`pathway_${pkg.id}_${comp.competency_id}` === key) {
+          return comp.modules.map(m => m.id).filter(Boolean)
+        }
+      }
+    }
+    for (const comp of pkg.competencies) {
+      if (`${pkg.id}_${comp.competency_id}` === key) {
+        return comp.modules.map(m => m.id).filter(Boolean)
+      }
+    }
+  }
+  return []
+}
+
+const isNestedCompFullySelected = (key) => {
+  const ids = getNestedCompetencyModuleIds(key)
+  return ids.length > 0 && ids.every(id => selectedModuleIds.value.has(id))
+}
+
+const isNestedCompPartiallySelected = (key) => {
+  const ids = getNestedCompetencyModuleIds(key)
+  const selected = ids.filter(id => selectedModuleIds.value.has(id))
+  return selected.length > 0 && selected.length < ids.length
+}
+
+// Selection toggle methods
+const toggleModuleSelection = (moduleId) => {
+  const newSet = new Set(selectedModuleIds.value)
+  if (newSet.has(moduleId)) {
+    newSet.delete(moduleId)
+  } else {
+    newSet.add(moduleId)
+  }
+  selectedModuleIds.value = newSet
+}
+
+const togglePackageSelection = (pkgId) => {
+  const ids = getPackageModuleIds(pkgId)
+  const allSelected = isPackageFullySelected(pkgId)
+  const newSet = new Set(selectedModuleIds.value)
+  ids.forEach(id => {
+    if (allSelected) {
+      newSet.delete(id)
+    } else {
+      newSet.add(id)
+    }
+  })
+  selectedModuleIds.value = newSet
+}
+
+const toggleCompetencySelection = (competencyId) => {
+  const ids = getCompetencyModuleIds(competencyId)
+  const allSelected = isCompetencyFullySelected(competencyId)
+  const newSet = new Set(selectedModuleIds.value)
+  ids.forEach(id => {
+    if (allSelected) {
+      newSet.delete(id)
+    } else {
+      newSet.add(id)
+    }
+  })
+  selectedModuleIds.value = newSet
+}
+
+const toggleNestedCompetencySelection = (key) => {
+  const ids = getNestedCompetencyModuleIds(key)
+  const allSelected = isNestedCompFullySelected(key)
+  const newSet = new Set(selectedModuleIds.value)
+  ids.forEach(id => {
+    if (allSelected) {
+      newSet.delete(id)
+    } else {
+      newSet.add(id)
+    }
+  })
+  selectedModuleIds.value = newSet
+}
+
+const toggleAllModules = () => {
+  if (allModulesSelected.value) {
+    selectedModuleIds.value = new Set()
+  } else {
+    selectedModuleIds.value = new Set(allModuleIds.value)
+  }
+}
+
+const togglePackageExpand = (pkgId) => {
+  const newSet = new Set(expandedPackages.value)
+  if (newSet.has(pkgId)) {
+    newSet.delete(pkgId)
+  } else {
+    newSet.add(pkgId)
+  }
+  expandedPackages.value = newSet
+}
+
+const initializeSelection = () => {
+  // Select all modules by default
+  selectedModuleIds.value = new Set(modules.value.map(m => m.id).filter(Boolean))
+}
 
 // Group modules by competency for Competency-Level view
 const competencyGroups = computed(() => {
@@ -1169,27 +1612,12 @@ const loadModules = async () => {
       viewType.value = response.data.view_type || 'competency_level'
       scalingInfo.value = response.data.scaling_info
       statistics.value = response.data.statistics
+      level1Consolidated.value = response.data.level1_consolidated || false
+      level1ModulesRemoved.value = response.data.level1_modules_removed || 0
 
-      // Expand first few groups by default
-      if (viewType.value === 'role_clustered') {
-        // Expand first package's groups
-        const firstPkg = trainingPackages.value[0]
-        if (firstPkg) {
-          firstPkg.competencies.slice(0, 3).forEach(comp => {
-            expandedNestedCompetencies.value.add(`${firstPkg.id}_${comp.competency_id}`)
-          })
-          if (firstPkg.hasSubclusters) {
-            firstPkg.commonCompetencies.slice(0, 2).forEach(comp => {
-              expandedNestedCompetencies.value.add(`common_${firstPkg.id}_${comp.competency_id}`)
-            })
-          }
-        }
-      } else {
-        // Expand first 3 competency groups
-        competencyGroups.value.slice(0, 3).forEach(g => {
-          expandedCompetencies.value.add(g.competency_id)
-        })
-      }
+      // Initialize selection (all modules selected by default)
+      initializeSelection()
+      // Packages and competencies start collapsed by default (D3, D4)
     }
   } catch (error) {
     console.error('Error loading AVIVA modules:', error)
@@ -1237,12 +1665,16 @@ const exportRfpDocument = async () => {
   const format = rfpExportFormat.value
   const formatLabel = format === 'excel' ? 'Excel' : 'Word'
   const isGenAI = format === 'word'
-  const moduleCount = rfpData.value?.phase3?.summary?.total_modules || 0
+  const scope = rfpModuleScope.value
+  const moduleCount = scope === 'all'
+    ? (rfpData.value?.phase3?.summary?.total_modules || modules.value.length)
+    : selectedModuleIds.value.size
+  const moduleLabel = scope === 'all' ? `all ${moduleCount}` : `${moduleCount} selected`
 
   // Different confirm message for GenAI formats
   const confirmMsg = isGenAI
-    ? `Generate ${formatLabel} RFP document with AI-generated content?\n\nThis may take 2-5 minutes as AI generates the Core Concept narrative and Module Goals/Contents for ${moduleCount} modules.`
-    : `Export comprehensive RFP document to ${formatLabel}?`
+    ? `Generate ${formatLabel} RFP document with AI-generated content?\n\nThis will include ${moduleLabel} modules. This may take 2-5 minutes as AI generates the Core Concept narrative and Module Goals/Contents.`
+    : `Export comprehensive RFP document to ${formatLabel}?\n\nThis will include ${moduleLabel} modules.`
 
   let loadingInstance = null
 
@@ -1276,16 +1708,23 @@ const exportRfpDocument = async () => {
     if (isGenAI) {
       loadingInstance = ElLoading.service({
         lock: true,
-        text: `Generating AI-enhanced ${formatLabel} document for ${moduleCount} modules... This may take a few minutes.`,
+        text: `Generating AI-enhanced RFP document for ${moduleLabel} modules... This may take a few minutes.`,
         background: 'rgba(0, 0, 0, 0.7)'
       })
     }
+
+    // Build module_ids based on user's scope choice
+    // 'all' = null (backend includes everything), 'aviva_selected' = selected IDs
+    const moduleIdsArray = scope === 'aviva_selected' && selectedModuleIds.value.size > 0
+      ? Array.from(selectedModuleIds.value)
+      : null
 
     const response = await axios.post(
       endpoint,
       {
         organization_id: organizationId.value,
-        include_llm: true
+        include_llm: true,
+        module_ids: moduleIdsArray
       },
       {
         responseType: 'blob',
@@ -1355,12 +1794,12 @@ const showModuleDetails = async (module) => {
 }
 
 const generateAndExport = async () => {
-  if (modules.value.length === 0) {
-    ElMessage.warning('No modules available to export')
+  if (selectedModuleIds.value.size === 0) {
+    ElMessage.warning('No modules selected for export')
     return
   }
 
-  const moduleIds = modules.value.map(m => m.id).filter(id => id)
+  const moduleIds = Array.from(selectedModuleIds.value)
   if (moduleIds.length === 0) {
     ElMessage.error('No valid module IDs found.')
     return
@@ -1371,7 +1810,7 @@ const generateAndExport = async () => {
 
   try {
     await ElMessageBox.confirm(
-      `Generate AVIVA plans for all ${moduleIds.length} modules using ${methodLabel} method and export to Excel?`,
+      `Generate AVIVA plans for ${moduleIds.length} selected modules using ${methodLabel} method and export to Excel?`,
       'Confirm Export',
       {
         confirmButtonText: 'Generate & Export',
@@ -1646,6 +2085,16 @@ onMounted(async () => {
   animation: fadeIn 0.3s ease;
 }
 
+.aviva-guidance-box {
+  margin-bottom: 20px;
+  background: #ECF5FF;
+  border-color: #D9ECFF;
+}
+
+.aviva-guidance-box .info-box-header .el-icon {
+  color: #409EFF;
+}
+
 .view-header {
   display: flex;
   align-items: center;
@@ -1706,6 +2155,15 @@ onMounted(async () => {
   color: #67C23A;
 }
 
+.consolidation-info-box {
+  background: #FDF6EC;
+  border-color: #FAECD8;
+}
+
+.consolidation-info-box .info-box-header .el-icon {
+  color: #E6A23C;
+}
+
 .info-points {
   margin: 0;
   padding-left: 20px;
@@ -1720,6 +2178,11 @@ onMounted(async () => {
 
 .info-points li strong {
   color: #303133;
+}
+
+.info-points li.note {
+  color: #909399;
+  font-style: italic;
 }
 
 .info-points li em {
@@ -1810,6 +2273,136 @@ onMounted(async () => {
   font-size: 13px;
 }
 
+/* Package Overview Cards */
+.package-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.overview-card {
+  background: white;
+  border: 2px solid #DCDFE6;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.overview-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.overview-card.package-engineers { border-color: #409EFF; }
+.overview-card.package-managers { border-color: #E6A23C; }
+.overview-card.package-partners { border-color: #67C23A; }
+
+.overview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.overview-card-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.overview-expand-icon {
+  transition: transform 0.2s;
+  color: #909399;
+  font-size: 14px;
+}
+
+.overview-expand-icon.is-expanded {
+  transform: rotate(90deg);
+}
+
+.overview-card-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.overview-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  padding: 6px 4px;
+  background: #F5F7FA;
+  border-radius: 6px;
+}
+
+.overview-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #303133;
+}
+
+.overview-stat-label {
+  font-size: 10px;
+  color: #909399;
+  text-transform: uppercase;
+}
+
+/* Competency Overview Bar */
+.competency-overview-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #F5F7FA;
+  border: 1px solid #E4E7ED;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.overview-bar-text {
+  font-size: 14px;
+  color: #606266;
+}
+
+.overview-bar-text strong {
+  color: #303133;
+}
+
+/* Package Expand Icon */
+.package-expand-icon {
+  transition: transform 0.2s;
+  color: #909399;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.package-expand-icon.is-expanded {
+  transform: rotate(90deg);
+}
+
+/* Package Body */
+.package-body {
+  /* Container for collapsible package content */
+}
+
+/* Checkbox spacing inside module-group-header and module-item */
+.module-group-header :deep(.el-checkbox) {
+  flex-shrink: 0;
+}
+
+.module-item :deep(.el-checkbox) {
+  flex-shrink: 0;
+}
+
+.module-item {
+  gap: 8px;
+}
+
 /* Training Packages View */
 .training-packages-view {
   display: flex;
@@ -1836,6 +2429,8 @@ onMounted(async () => {
   gap: 16px;
   padding: 20px 24px;
   background: linear-gradient(135deg, #F5F7FA 0%, #EBEEF5 100%);
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
 .header-engineers { background: linear-gradient(135deg, #ECF5FF 0%, #D9ECFF 100%); }
@@ -2514,11 +3109,31 @@ onMounted(async () => {
   color: #303133;
 }
 
-.strategy-item {
+.strategy-item-block {
+  padding: 10px 0;
+  border-bottom: 1px solid #F5F7FA;
+}
+
+.strategy-item-block:last-child {
+  border-bottom: none;
+}
+
+.strategy-item-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+}
+
+.strategy-name {
+  font-weight: 600;
+  color: #303133;
+}
+
+.strategy-description {
+  margin: 6px 0 0 0;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
 }
 
 .format-dist {
@@ -2678,6 +3293,23 @@ onMounted(async () => {
   font-weight: 600;
   color: #606266;
   margin-bottom: 12px;
+}
+
+/* Module Scope Selection */
+.module-scope-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.module-scope-row .scope-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #606266;
+  white-space: nowrap;
 }
 
 /* Compact Export Layout */
@@ -2846,6 +3478,33 @@ onMounted(async () => {
   right: 8px;
   color: #409EFF;
   font-size: 14px;
+}
+
+/* Task Navigation */
+.task-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #EBEEF5;
+}
+
+.task-navigation .nav-hint {
+  font-size: 13px;
+  color: #909399;
+}
+
+/* RFP Guidance Box */
+.rfp-guidance-box {
+  margin-bottom: 20px;
+  background: #F0F7FF;
+  border-color: #D6E8FA;
+}
+
+.rfp-guidance-box .info-box-header .el-icon {
+  color: #409EFF;
 }
 
 </style>

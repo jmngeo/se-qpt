@@ -61,6 +61,25 @@
               </li>
             </ul>
           </div>
+
+          <!-- Module Consolidation Note (only for role-clustered view) -->
+          <div v-if="selectedView === 'role_clustered' && level1Consolidated" class="info-box consolidation-info-box">
+            <div class="info-box-header">
+              <el-icon><Connection /></el-icon>
+              <h4>Module Consolidation</h4>
+            </div>
+            <ul class="info-points">
+              <li>
+                <strong>{{ level1ModulesRemoved }} Knowing-level (Level 1) module(s)</strong> have been consolidated.
+                When a higher competency level (Understanding, Applying, or Mastering) is required for a competency,
+                the Knowing level is automatically covered and does not require a separate training module.
+              </li>
+              <li class="note">
+                This consolidation applies only to the role-clustered training structure to reduce redundant modules.
+                The original Learning Objectives remain unchanged.
+              </li>
+            </ul>
+          </div>
         </div>
 
         <!-- Stats and Legend Bar -->
@@ -558,6 +577,8 @@ const scalingInfo = ref(null)
 const strategyName = ref('')
 const roleClusters = ref([])
 const roleToClusterMap = ref({})
+const level1Consolidated = ref(false)
+const level1ModulesRemoved = ref(0)
 const expandedCompetencies = ref(new Set())
 const expandedNestedCompetencies = ref(new Set())
 const expandedModules = ref(new Set())
@@ -865,6 +886,8 @@ const loadData = async () => {
       modules.value = modulesResponse.data.modules || []
       scalingInfo.value = modulesResponse.data.scaling_info
       strategyName.value = modulesResponse.data.strategy_name
+      level1Consolidated.value = modulesResponse.data.level1_consolidated || false
+      level1ModulesRemoved.value = modulesResponse.data.level1_modules_removed || 0
 
       // Expand all competencies by default
       modules.value.forEach(m => {
@@ -998,6 +1021,15 @@ onMounted(() => {
 
 .programs-info-box .info-box-header .el-icon {
   color: #67C23A;
+}
+
+.consolidation-info-box {
+  background: #FDF6EC;
+  border-color: #FAECD8;
+}
+
+.consolidation-info-box .info-box-header .el-icon {
+  color: #E6A23C;
 }
 
 .info-box-header h4 {

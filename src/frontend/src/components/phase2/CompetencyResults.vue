@@ -19,6 +19,36 @@
         </p>
       </div>
 
+      <!-- Guidance Info Box -->
+      <div class="info-box gap-analysis-guidance-box">
+        <div class="info-box-header">
+          <el-icon><InfoFilled /></el-icon>
+          <h4>Understanding Your Gap Analysis</h4>
+        </div>
+        <ul class="info-points">
+          <li>
+            The results below show the <strong>gap between your current competency level</strong> (from the self-assessment)
+            <strong>and the required level</strong> for your selected role(s). Competencies marked <strong>"Below Target"</strong>
+            indicate areas where training is needed.
+          </li>
+          <li>
+            <strong>How to read the radar chart:</strong> The <span style="color:#67c23a;font-weight:600;">green area</span> represents
+            your current levels, and the <span style="color:#f56c6c;font-weight:600;">red outline</span> shows the required levels.
+            Where the red extends beyond the green, there is a competency gap.
+          </li>
+          <li>
+            <strong>What happens next:</strong> Competency gaps identified here will be used to generate
+            <strong>Learning Objectives</strong> (Phase 2, Task 4) and subsequently to build
+            <strong>training modules</strong> in Phase 3. An AI generates personalized feedback for each competency
+            to help you understand your strengths and areas for improvement.
+          </li>
+          <li class="note">
+            Data sources: Self-assessment scores (this phase), required competency levels from
+            the role-competency matrix (Phase 1), AI-generated feedback per competency area.
+          </li>
+        </ul>
+      </div>
+
       <!-- Assessment Summary -->
       <div class="summary-cards">
         <el-card class="summary-card">
@@ -208,7 +238,8 @@ import {
   TrophyBase,
   DataBoard,
   UserFilled,
-  Download
+  Download,
+  InfoFilled
 } from '@element-plus/icons-vue'
 import { Radar } from 'vue-chartjs'
 import {
@@ -960,6 +991,59 @@ onMounted(() => {
   font-size: 1.1rem;
   color: #409eff;
   margin-bottom: 10px;
+}
+
+/* Guidance Info Box */
+.info-box {
+  background: #F8F9FA;
+  border: 1px solid #E4E7ED;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+}
+
+.info-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.info-box-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.info-points {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.info-points li {
+  margin-bottom: 4px;
+}
+
+.info-points li strong {
+  color: #303133;
+}
+
+.info-points li.note {
+  color: #909399;
+  font-style: italic;
+}
+
+.gap-analysis-guidance-box {
+  background: #FDF6EC;
+  border-color: #FAECD8;
+}
+
+.gap-analysis-guidance-box .info-box-header .el-icon {
+  color: #E6A23C;
 }
 
 .results-header {

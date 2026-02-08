@@ -1,879 +1,601 @@
+## Session: 2026-01-03 - Phase 3 Implementation Planning
+
+### What Was Done This Session
+
+1. **Analyzed Meeting Notes (11.12.2025)** with Ulf regarding Phase 3 design:
+   - Two training views: Competency-Level Based vs Role-Clustered Based
+   - 6 Training Program Clusters (NOT the 14 SE Role Clusters)
+   - User-driven format selection with 3-factor suitability feedback
+   - NO automatic recommendations - user selects, system provides feedback
+   - Timeline planning (Concept, Pilot, Rollout milestones)
+
+2. **Cross-verified Phase3_Macro_Planning_Specification_v3.2.md** against meeting notes:
+   - Specification is ACCURATE and ALIGNED with meeting discussion
+   - All key design decisions properly captured
+   - DB keys match (competency IDs, strategy IDs)
+
+3. **Audited Existing Database** for Phase 3 inputs:
+   - **EXISTS**: 16 competencies, 7 strategies, 14 SE role clusters, organization data, LOs, role mappings
+   - **MISSING**: Learning formats table, Training Program Clusters table, Competency-LF matrix, Strategy-LF matrix
+
+4. **Created Comprehensive Implementation Plan**:
+   - File: `data/source/Phase 3/PHASE3_IMPLEMENTATION_PLAN.md`
+   - Contains all data requirements, schemas, seed data, migration SQL
+   - Implementation phases outlined
+
+5. **Design Decision: Training Cluster Mapping**:
+   - RECOMMENDATION: Add Training Program Cluster mapping to Phase 1 Task 2 Role Mapping LLM prompt
+   - Rationale: Efficient (one LLM call), context available, logical grouping, better UX
+   - Extend `organization_role_mappings` table with `training_program_cluster_id` column
+
+### Key Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `data/source/Phase 3/PHASE3_IMPLEMENTATION_PLAN.md` | CREATED | Comprehensive implementation plan with all data requirements |
+
+### Key Files to Reference
+
+| File | Purpose |
+|------|---------|
+| `data/source/Phase 3/Phase3_Macro_Planning_Specification_v3.2.md` | Main specification document |
+| `data/source/Phase 3/PHASE3_IMPLEMENTATION_PLAN.md` | Implementation plan with schemas |
+| `data/Meeting notes/Meeting notes 11.12.2025.txt` | Original meeting notes (UTF-16 encoding) |
+
+### Database Tables Status for Phase 3
+
+**EXISTING (ready to use):**
+- `competency` - 16 SE competencies (IDs 1, 4-18)
+- `strategy_template` - 7 qualification strategies (IDs 1-7)
+- `role_cluster` - 14 SE role clusters (for competency mapping)
+- `organization` - maturity_score, selected_archetype
+- `phase_questionnaire_responses` - target_group size data
+- `generated_learning_objectives` - LO data with gaps
+- `organization_role_mappings` - org roles to SE cluster mapping
+- `organization_existing_trainings` - existing training exclusions
+- `learning_strategy` - selected strategies per org
+
+**TO CREATE (new tables needed):**
+- `learning_format` - 10 learning formats with properties
+- `training_program_cluster` - 6 training program clusters
+- `strategy_learning_format_matrix` - 7x10 = 70 rows (++, +, --)
+- `competency_learning_format_matrix` - 16x10 = 160 rows (achievable levels)
+- `phase3_training_module` - store user format selections
+- `phase3_timeline` - store LLM-generated milestones
+
+**TO EXTEND:**
+- `organization_role_mappings` - add `training_program_cluster_id` column
+
+### Next Steps (Priority Order)
+
+1. **Create Database Migration** `014_phase3_learning_formats.sql`:
+   - Create all new tables listed above
+   - Add training_program_cluster_id to organization_role_mappings
+   - Seed reference data (formats, clusters, matrices)
+
+2. **Update Phase 1 Task 2 Role Mapping**:
+   - Modify LLM prompt to include Training Program Cluster mapping
+   - Update service to parse and store both cluster assignments
+   - Test with existing organizations
+
+3. **Implement Phase 3 Backend**:
+   - Task 1: Training structure selection API
+   - Task 2: Format selection with 3-factor suitability
+   - Task 3: LLM timeline generation
+
+4. **Implement Phase 3 Frontend**:
+   - Dashboard with 3 tasks
+   - Module list with format dropdowns
+   - Suitability feedback display (green/yellow/red)
+   - Timeline visualization
+
+### Important Design Notes
+
+1. **Training Program Clusters vs SE Role Clusters**:
+   - 14 SE Role Clusters = for competency profile mapping (Phase 1/2)
+   - 6 Training Program Clusters = for training organization (Phase 3)
+   - These are DIFFERENT concepts - don't confuse them
+
+2. **3-Factor Suitability Feedback**:
+   - Factor 1: Participant count appropriateness
+   - Factor 2: Competency level achievable (from Competency-LF matrix)
+   - Factor 3: Strategy consistency (from Strategy-LF matrix)
+   - Display as green/yellow/red indicators
+
+3. **Participant Scaling Formula**:
+   ```
+   Scaling Factor = Target Group Size / Assessed Users
+   Estimated Participants = Users with Gap × Scaling Factor
+   ```
+
+4. **Timeline is LLM-generated and NOT adjustable** (informational only)
+
+### Current System State
+
+- No servers running (analysis session only)
+- No code changes made
+- Only documentation file created
+
+### Credentials (unchanged)
+
+- DB: `seqpt_admin:SeQpt_2025@localhost:5432/seqpt_database`
+- Production: `ssh -i .ssh/zangetsu root@167.71.52.6`
 
 ---
 
-## Session: 2025-12-02 - Meeting Analysis & Phase 2 LO Task Fixes
 
-### Session Overview
-- **Main Task**: Analyzed meeting notes from Ulf meeting (28.11.2025) and implemented P1-P3 fixes for Phase 2 LO task
-- **Status**: P1, P2, P3 changes COMPLETE. P4 pending.
 
 ---
 
-### Documents Created This Session
+## Session: 2026-01-03 - Phase 3 Database Migration and LLM Prompt Update
 
-| Document | Purpose |
-|----------|---------|
-| `MEETING_ANALYSIS_2025-11-28.md` | Comprehensive analysis of Ulf meeting notes |
-| `LO_TEXT_MAPPING_BUG_ANALYSIS.md` | Root cause analysis of Agile Methods/SysML bug - FIXED |
-| `PHASE2_LO_TASK_REQUIREMENTS_2025-11-28.md` | Phase 2 LO task requirements with status tracking |
-| `PHASE3_FORMAT_RECS_DESIGN_INPUTS.md` | All inputs for Phase 3 Learning Format design |
-| `test_cross_contamination_fix.py` | Test script for LLM validation functions |
+### Summary
 
-### BACKLOG.md Updated
-Added items #14-#18 from Ulf's meeting:
-- #14: Train the Trainer (TTT) - Third Path Implementation
-- #15: Level 6 / Mastery - Process Owner Logic
-- #16: Phase 3 Learning Format Recommendations - Design Required
-- #17: Strategy Change Recommendation (Textual Only)
-- #18: PMT Breakdown for Additional Competencies
+Implemented the foundational database schema and service updates for Phase 3 "Macro Planning".
 
----
+### Tasks Completed
 
-### Changes Implemented This Session
+#### 1. Created Migration 014_phase3_learning_formats.sql
 
-#### P1 Bug Fix - LO Text Mapping (COMPLETE)
-**File**: `src/backend/app/services/learning_objectives_core.py`
+**File**: `src/backend/setup/migrations/014_phase3_learning_formats.sql`
 
-Changes:
-1. Lowered LLM temperature from 0.7 to 0.3 (lines ~1910, ~2044)
-2. Updated prompts with stricter constraints to prevent hallucination
-3. Added cross-contamination validation functions:
-   - `_validate_text_relevance()`
-   - `_validate_customization_relevance()`
-   - `CROSS_CONTAMINATION_KEYWORDS` dictionary (lines ~1835-1905)
-4. Added "unchanged" response handling for when PMT doesn't apply
+**Tables Created**:
 
-#### P2 UI Changes (COMPLETE)
+| Table | Rows | Purpose |
+|-------|------|---------|
+| `learning_format` | 10 | 10 learning formats (Seminar, Webinar, Coaching, etc.) with all properties |
+| `training_program_cluster` | 6 | 6 training clusters (Engineers, Managers, Executives, Support Staff, Partners, Operations) |
+| `strategy_learning_format_matrix` | 70 | 7 strategies x 10 formats consistency matrix (++, +, --) |
+| `competency_learning_format_matrix` | 160 | 16 competencies x 10 formats max achievable level matrix |
+| `phase3_training_module` | - | Stores user format selections per module |
+| `phase3_timeline` | - | Stores LLM-generated milestone dates |
+| `phase3_config` | - | Phase 3 configuration per organization |
 
-| Change | File |
-|--------|------|
-| "Skill Gaps to Train" -> "Levels to Advance" | `LearningObjectivesView.vue` line 64 |
-| "Total Competencies" -> "Competencies with Gap" | `LearningObjectivesView.vue` lines 67-68, added `competenciesWithGap` computed (lines 328-343) |
-| Remove Level 6 from pyramid tabs | `MiniPyramidNav.vue` lines 63-69 |
-| Remove Level 6 from progress bars | `PyramidLevelView.vue` line 25 |
-| Hide TTT banner | `LearningObjectivesView.vue` lines 112-134 (commented out) |
+**Column Added**:
+- `organization_role_mappings.training_program_cluster_id` - Links org roles to Training Program Clusters
 
-#### P3 UI Improvements (COMPLETE)
+**Indexes Created**: 7 new indexes for performance
 
-| Change | File |
-|--------|------|
-| Convert LO text to bullet points | `SimpleCompetencyCard.vue` - added `objectiveBullets` computed (lines 241-256), template (lines 48-53), CSS (lines 434-454) |
-| Remove level numbers from tabs | `MiniPyramidNav.vue` line 37-38, `LevelContentView.vue` lines 6-7 |
-| Add role legend "(X/Y)" explanation | `LevelContentView.vue` lines 39-52, CSS (lines 327-348) |
-| Mini pyramid shows "Knowing/Understanding/Applying" | `MiniPyramidNav.vue` - added `shortName` prop, updated template and CSS |
-| View toggle moved above Definition note | `LearningObjectivesView.vue` lines 11-37 |
+#### 2. Updated Phase 1 Task 2 LLM Prompt
 
----
+**File**: `src/backend/app/services/role_cluster_mapping_service.py`
 
-### P4 Items REMAINING (Not Started)
+**Changes**:
+1. Added `get_training_program_clusters_static()` method - Returns the 6 Training Program Clusters
+2. Added `get_training_program_clusters_from_db()` method - Fetches clusters from database
+3. Updated `build_mapping_prompt()` - Now includes both:
+   - PART A: 14 SE Role Clusters (for competency mapping)
+   - PART B: 6 Training Program Clusters (for training organization)
+4. Updated `map_single_role()` - Returns both mappings in response:
+   - `se_role_mappings` - Array of SE Role Cluster mappings
+   - `training_program_cluster` - Single Training Program Cluster assignment
+5. Updated `map_multiple_roles()` - Handles new response format, tracks distribution
 
-1. **Add Excel export button** (2-3 hours)
-   - Export LOs as Excel with competency matrix
-   - Structure: Competency | Level | Level Name | LO Text | PMT breakdown columns
+**LLM Response Format**:
+```json
+{
+  "se_role_mappings": [
+    {"cluster_id": 4, "cluster_name": "System Engineer", "confidence_score": 92, ...}
+  ],
+  "training_program_cluster": {
+    "cluster_id": 1,
+    "cluster_name": "Engineers",
+    "training_program_name": "SE for Engineers",
+    "reasoning": "..."
+  }
+}
+```
 
-2. **Add PMT breakdown for 3 additional competencies** (2-3 hours)
-   - Integration, Verification & Validation (ID: 16)
-   - Decision Management (ID: 11)
-   - Information Management (ID: 12)
-   - Update `se_qpt_learning_objectives_template_v2.json`
+#### 3. Updated Models
 
----
+**File**: `src/backend/models.py`
 
-### Key Design Decisions from Ulf Meeting
+**New Model Added**:
+- `TrainingProgramCluster` - Model for the 6 Training Program Clusters
 
-1. **Level 6 excluded from UI** - TTT/Mastery deferred to backlog
-2. **E-learning rule**: Can only achieve Level 2, NOT Level 4
-3. **3 modules per competency**: Levels 1, 2, 4 (cut if no gap)
-4. **Aggregate view first** for Phase 3: "How many people need Level X across ALL roles"
-5. **Recommendations only**: User makes final selection for formats
-6. **No cost calculations**: User reads Sachin's thesis for cost info
+**Updated Model**:
+- `OrganizationRoleMapping` - Added:
+  - `training_program_cluster_id` column
+  - `training_program_cluster` relationship
+  - Updated `to_dict()` to include Training Program Cluster data
 
-### Phase 3 Design Inputs
-- Sachin's thesis: `\data\source\thesis_files\Sachin_Kumar_Master_Thesis_6906625.pdf`
-- `DISTRIBUTION_SCENARIO_ANALYSIS.md` - Ulf approved
-- `TRAINING_METHODS.md`
-- `PHASE3_FORMAT_RECS_DESIGN_INPUTS.md` - comprehensive input doc
+### Key Design Decisions
 
----
+1. **Backward Compatibility**: The role mapping service returns both `mappings` (old format) and `se_role_mappings` (new format) for backward compatibility
 
-### Files Modified This Session
+2. **Two Cluster Types**: Clear distinction maintained:
+   - 14 SE Role Clusters (role_cluster table) = competency profiles
+   - 6 Training Program Clusters (training_program_cluster table) = training organization
 
-**Backend:**
-- `src/backend/app/services/learning_objectives_core.py` - LLM bug fix
+3. **LLM Prompt Structure**: Single LLM call assigns both cluster types efficiently
 
-**Frontend:**
-- `src/frontend/src/components/phase2/task3/LearningObjectivesView.vue`
-- `src/frontend/src/components/phase2/task3/MiniPyramidNav.vue`
-- `src/frontend/src/components/phase2/task3/PyramidLevelView.vue`
-- `src/frontend/src/components/phase2/task3/LevelContentView.vue`
-- `src/frontend/src/components/phase2/task3/SimpleCompetencyCard.vue`
+### Files Modified
 
-**Documentation:**
-- `BACKLOG.md` - Added items #14-#18
-- `PHASE2_LO_TASK_REQUIREMENTS_2025-11-28.md` - Status tracking
-- Multiple new analysis documents (see above)
+| File | Changes |
+|------|---------|
+| `src/backend/setup/migrations/014_phase3_learning_formats.sql` | NEW - Complete Phase 3 schema |
+| `src/backend/app/services/role_cluster_mapping_service.py` | Updated LLM prompt and response handling |
+| `src/backend/models.py` | Added TrainingProgramCluster model, updated OrganizationRoleMapping |
 
----
+### Next Steps
 
-### Next Session Priorities
+1. **Apply Migration**: Run the migration on local and production databases:
+   ```bash
+   PGPASSWORD=SeQpt_2025 psql -U seqpt_admin -d seqpt_database -f src/backend/setup/migrations/014_phase3_learning_formats.sql
+   ```
 
-1. **P4: Excel Export** - Add export button to LO results page
-2. **P4: PMT Templates** - Create PMT breakdown for IVV, Decision Mgmt, Info Mgmt
-3. **Test all changes** - Run frontend and verify UI changes work correctly
-4. **Phase 3 Design** - Study Sachin's thesis, brainstorm format recommendation logic
+2. **Test Role Mapping**: Test the updated role mapping service with existing organizations
 
----
+3. **Implement Phase 3 Routes**: Create the backend API endpoints for:
+   - Task 1: Training structure selection
+   - Task 2: Format selection with 3-factor suitability
+   - Task 3: LLM timeline generation
+
+4. **Implement Phase 3 Frontend**: Create Vue components for Phase 3 dashboard
 
 ### Server Status
-- No servers were started this session (analysis/coding only)
+
+- No servers were running (schema/code changes only)
 - Backend: `cd src/backend && PYTHONPATH=. ./venv/Scripts/python.exe run.py`
 - Frontend: `cd src/frontend && npm run dev`
 
----
+### Credentials
 
-*Session ended: 2025-12-02*
-
-
----
-
-## Session: 2025-12-02 - Testing & Role-Based View Fix
-
-### Session Overview
-- **Main Task**: Continued from previous session - implemented P4 fix for Role-Based View and verified P1-P3 changes
-- **Status**: P1-P3 changes verified, Role-Based View level naming fixed, E2E testing completed
+- Local DB: `seqpt_admin:SeQpt_2025@localhost:5432/seqpt_database`
+- Production: `ssh -i .ssh/zangetsu root@167.71.52.6`
 
 ---
 
-### Changes Implemented This Session
+*Session ended: 2026-01-03*
 
-#### Role-Based View Level Name Fix (COMPLETE)
-**File**: `src/frontend/src/components/phase2/task3/RoleBasedObjectivesView.vue`
-
-**Issue**: In the Role-Based View, competencies were showing "Level 2, Level 4" instead of user-friendly names like "Understanding, Applying"
-
-**Changes**:
-1. Added `getLevelName()` helper function (lines 361-369):
-   ```javascript
-   const getLevelName = (level) => {
-     const names = {
-       1: 'Knowing',
-       2: 'Understanding',
-       4: 'Applying',
-       6: 'Mastering'
-     }
-     return names[level] || `Level ${level}`
-   }
-   ```
-2. Updated template to use `{{ getLevelName(level) }}` instead of `Level {{ level }}` (line 108)
-
----
-
-### P1-P3 Changes Verification
-
-All changes from the previous session were verified to be in place:
-
-| Change | File | Status |
-|--------|------|--------|
-| "Skill Gaps to Train" -> "Levels to Advance" | LearningObjectivesView.vue:64 | VERIFIED |
-| "Total Competencies" -> "Competencies with Gap" | LearningObjectivesView.vue:67-68 | VERIFIED |
-| `competenciesWithGap` computed property | LearningObjectivesView.vue:329-344 | VERIFIED |
-| Level 6 excluded from tabs | MiniPyramidNav.vue:63-69 | VERIFIED |
-| TTT banner commented out | LearningObjectivesView.vue:112-134 | VERIFIED |
-| LO text bullet points | SimpleCompetencyCard.vue:243-256 | VERIFIED |
-| Tab labels show names only | MiniPyramidNav.vue:37-38 | VERIFIED |
-| Role legend (X/Y) explanation | LevelContentView.vue:48-50 | VERIFIED |
-
----
-
-### E2E Testing Results
-
-#### Org 29 (High Maturity - ROLE_BASED pathway)
-- **Maturity Level**: 5 (Optimizing), Score: 88.8
-- **Pathway**: ROLE_BASED_DUAL_TRACK
-- **Users**: 21 with 100% assessment completion
-- **Roles**: 4 (Systems Engineering Lead, Requirements Analyst, Architecture Lead, Integration Engineer)
-- **PMT Context**: Present
-- **LO Results**:
-  - Level 1: 0 competencies need training (all achieved)
-  - Level 2: 6 competencies need training
-  - Level 4: 14 competencies need training
-  - Level 6: 0 (hidden from UI per requirements)
-- **Status**: WORKING CORRECTLY
-
-#### Org 28 (Low Maturity - TASK_BASED pathway)
-- **Maturity Level**: 1 (Initial/Ad-hoc), Score: 17.2
-- **Pathway**: TASK_BASED_DUAL_TRACK
-- **Users**: 10 with 90% assessment completion (9/10)
-- **Roles**: 0 (no roles defined)
-- **PMT Context**: Not present
-- **Selected Strategies**: SE for Managers, Train the SE-Trainer, Common Basic Understanding
-- **LO Results**: 0 competencies need training
-- **Notes**: Data was stale (from cache). The strategies selected have low target levels (1-2) and user scores already exceed targets for most competencies. This is expected behavior - no gaps exist.
-- **Status**: WORKING AS DESIGNED (but data may need refresh)
-
----
-
-### Server Status
-- **Backend**: Running on http://127.0.0.1:5000
-- **Frontend**: Running on http://localhost:3001 (port 3000 was in use)
-
----
-
-### Remaining P4 Items
-
-1. **Excel Export Button** (2-3 hours)
-   - Export LOs as Excel with competency matrix
-   - Backend route exists: `/api/phase2/learning-objectives/{org_id}/export`
-   - Frontend API method exists: `phase2Task3Api.exportObjectives()`
-   - Need to add UI button in LearningObjectivesView.vue
-
-2. **PMT Breakdown for 3 Additional Competencies** (2-3 hours)
-   - Integration, Verification & Validation (ID: 16)
-   - Decision Management (ID: 11)
-   - Information Management (ID: 12)
-   - Update `se_qpt_learning_objectives_template_v2.json`
-
----
-
-### Documentation Files to Clean Up
-
-The following files were created during implementation and should be reviewed for consolidation:
-
-Essential Design Files (KEEP):
-- `LEARNING_OBJECTIVES_DESIGN_V5_COMPREHENSIVE.md` (or consolidate to single final version)
-- `DISTRIBUTION_SCENARIO_ANALYSIS.md` (Ulf approved)
-- `TRAINING_METHODS.md`
-- `PHASE3_FORMAT_RECS_DESIGN_INPUTS.md`
-
-Files to Consider Archiving/Removing:
-- Multiple `*_ANALYSIS.md` and `*_REPORT.md` files
-- Multiple `SESSION_SUMMARY_*.md` files
-- Test scripts in root directory (`test_*.py`, `debug_*.py`, etc.)
-
----
-
-### Next Session Priorities
-
-1. Add Excel export button to LO results page (P4)
-2. Create PMT breakdown templates for IVV, Decision Mgmt, Info Mgmt (P4)
-3. Clean up documentation files
-4. Begin Phase 3 Learning Format design (study Sachin's thesis)
-
----
-
-*Session ended: 2025-12-02*
 
 
 ---
 
-### Additional Session Progress (continued 2025-12-02)
-
-#### P4: Excel Export Button (COMPLETE)
-**File**: `src/frontend/src/components/phase2/task3/LearningObjectivesView.vue`
-
-Changes:
-1. Added import for `Download` icon and `phase2Task3Api`
-2. Added `isExporting` ref for loading state
-3. Added `handleExport` async method that calls `phase2Task3Api.exportObjectives()`
-4. Added "Export to Excel" button in card header (visible only when data is loaded)
-
-Backend endpoint verified: `GET /api/phase2/learning-objectives/{org_id}/export?format=excel`
-- Returns proper Excel file with Content-Type: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-- Filename format: `learning_objectives_{org_name}_{date}.xlsx`
-
----
-
-#### Documentation Cleanup (COMPLETE)
-
-**Before cleanup:**
-- 146 MD files in root
-- 52 Python test/debug scripts
-- Various JSON and SQL utility files
-
-**After cleanup:**
-- 10 essential MD files in root
-- 0 Python scripts in root
-- All development artifacts moved to `archive/docs_2025-12-02/` and `archive/scripts_2025-12-02/`
-
-**Essential files kept in root:**
-1. README.md
-2. BACKLOG.md
-3. SESSION_HANDOVER.md
-4. DATABASE_INITIALIZATION_GUIDE.md
-5. DEPLOYMENT_CHECKLIST.md
-6. DISTRIBUTION_SCENARIO_ANALYSIS.md (Ulf approved)
-7. TRAINING_METHODS.md
-8. PHASE3_FORMAT_RECS_DESIGN_INPUTS.md
-9. MEETING_ANALYSIS_2025-11-28.md
-10. PHASE2_LO_TASK_REQUIREMENTS_2025-11-28.md
-11. LO_TEXT_MAPPING_BUG_ANALYSIS.md
-
----
-
-### Summary of All Changes This Session
-
-| Item | Status | Description |
-|------|--------|-------------|
-| Role-Based View level names | DONE | Changed "Level 2" to "Understanding", etc. |
-| P1-P3 verification | DONE | All changes from previous session verified |
-| E2E testing org 29 (high maturity) | DONE | 20 gaps, 6 at L2, 14 at L4 |
-| E2E testing org 28 (low maturity) | DONE | 0 gaps (users exceed targets) |
-| P4: Excel export button | DONE | Button added to LO results header |
-| Documentation cleanup | DONE | 146->10 MD files, moved rest to archive |
-| P4: PMT breakdown for 3 competencies | DEFERRED | Not done this session |
-
----
-
-### Files Modified This Session
-
-**Frontend:**
-- `src/frontend/src/components/phase2/task3/RoleBasedObjectivesView.vue` - Added getLevelName() helper
-- `src/frontend/src/components/phase2/task3/LearningObjectivesView.vue` - Added Excel export button
-
-**Project Structure:**
-- Created `archive/docs_2025-12-02/` - Contains 135+ archived MD files
-- Created `archive/scripts_2025-12-02/` - Contains 50+ archived Python/SQL/JSON files
-- Moved `temp/` to `archive/temp_2025-12-02/`
-- Moved `test_files/` to `archive/test_files_2025-12-02/`
-
----
-
-### Server Status at End of Session
-- Backend: Running on http://127.0.0.1:5000
-- Frontend: Running on http://localhost:3001
-
----
-
-### Next Session Priorities
-
-1. **P4 (deferred)**: Add PMT breakdown for IVV, Decision Management, Information Management
-2. **Phase 3 Design**: Study Sachin's thesis and create conceptual design for Learning Format Recommendations
-3. **Test the Excel export** in browser to verify download works correctly
-
----
-
-*Session ended: 2025-12-02*
-
-
----
-
-## Session: 2025-12-02 18:00 - 19:55 UTC
+## Session: 2026-01-03 (Continued) - Phase 3 Backend Implementation Complete
 
 ### Summary
-Worked on P4: Excel Export functionality for Learning Objectives and PMT breakdown for 3 competencies.
 
-### Completed Tasks
+Completed Phase 3 "Macro Planning" backend implementation including migration verification, service creation, and API routes.
 
-1. **PMT Breakdown for 3 Competencies** (COMPLETED)
-   - Added full PMT breakdown (Process, Method, Tool) for:
-     - Integration, Verification, Validation (ID: 16)
-     - Decision Management (ID: 11)
-     - Information Management (ID: 12)
-   - Updated `se_qpt_learning_objectives_template_v2.json` to v2.1
-   - Updated metadata, hasPMT flags, and pmtCompetencies lists
-   - File: `data/source/Phase 2/se_qpt_learning_objectives_template_v2.json`
+### Tasks Completed
 
-2. **Excel Export - Initial Fixes** (PARTIALLY COMPLETED)
-   - Fixed filename extension: `.excel` -> `.xlsx`
-   - Fixed CORS headers to expose `Content-Disposition`
-   - Updated export to read from cache instead of regenerating
-   - Added support for NEW data format (`data.main_pyramid`)
-   - Fixed TypeError when LO text is a dict (PMT breakdown)
-   - Files modified:
-     - `src/backend/app/routes.py` (export_excel function, lines ~5616-6070)
-     - `src/backend/app/__init__.py` (CORS expose_headers)
-     - `src/frontend/src/api/phase2.js` (filename extraction)
+#### 1. Verified Migration 014_phase3_learning_formats.sql
 
-### Remaining Work - Excel Export Improvements
+Cross-checked all data against Phase3_Macro_Planning_Specification_v3.2.md:
 
-The Excel export needs these fixes (user feedback):
+| Element | Expected | Verified |
+|---------|----------|----------|
+| Learning Formats | 10 formats | [OK] All correct |
+| Training Program Clusters | 6 clusters | [OK] All correct |
+| Strategy-LF Matrix | 70 entries | [OK] All values match |
+| Competency-LF Matrix | 160 entries | [OK] Competency IDs correct (1, 4-18) |
+| update_timestamp() function | Required | [OK] Exists in DB |
 
-1. **Single sheet only** - Remove "By Level" sheet, merge columns into main sheet
-2. **Progressive learning logic** - If target is L4, L1 and L2 should show as "Achieved" not "Not Targeted"
-3. **Parse LO text properly** - Extract `objective_text` from dict structure like:
-   ```json
-   {'level': 4, 'source': 'template', 'customized': False, 'level_name': 'Shaping Adequately', 'objective_text': 'The participant is able to...', 'has_pmt_breakdown': False}
-   ```
-4. **Show achieved levels** - Display LO texts for achieved levels, mark as "Achieved"
-5. **Add Status and Roles/Users columns** to the main sheet
-
-### Data Structure Notes
-
-The NEW format from `learning_objectives_core.py`:
-```
-data.main_pyramid.levels.{1,2,4}.competencies[]
-```
-
-Each competency has:
-- `competency_id`, `competency_name`
-- `status`: 'training_required' or 'achieved'
-- `grayed_out`: boolean (not targeted by strategy)
-- `learning_objective`: Can be string OR dict with `objective_text`
-- `roles_needing_this_level`: array of role info
-
-### Key Files Modified This Session
-- `src/backend/app/routes.py` - export_excel function (major rewrite)
-- `src/backend/app/__init__.py` - CORS headers
-- `src/frontend/src/api/phase2.js` - filename handling
-- `data/source/Phase 2/se_qpt_learning_objectives_template_v2.json` - PMT breakdowns
-
-### Server Status
-- Backend: Running on http://127.0.0.1:5000
-- Frontend: Running on http://localhost:3000
-- Cache cleared for org 29 and regenerated with NEW format
-
-### Next Steps
-1. Fix Excel export with single sheet and proper logic
-2. Test with org 29 (High Maturity)
-3. Commit changes when complete
-
-
-
----
-
-## Session Update: 2025-12-02 19:55 UTC
-
-### Excel Export - Final Implementation
-
-Rewrote the `export_excel` function with all requested fixes:
-
-**Changes Made:**
-1. **Single sheet only** - Removed the second "By Level" sheet
-2. **`extract_objective_text()` helper function** - Properly extracts `objective_text` from dict structures like:
-   ```python
-   {'level': 4, 'source': 'template', 'customized': False, 'level_name': 'Shaping Adequately',
-    'objective_text': 'The participant is able to...', 'has_pmt_breakdown': False}
-   ```
-3. **Progressive learning logic** - If target is L4, L1 and L2 are shown as "Achieved" (not "Not Targeted")
-4. **Always shows LO text** - For both achieved and gap levels
-5. **Combined cell content** - Status, Roles/Users, and LO text in each cell
-6. **Color coding** - Green = Achieved, Yellow = Gap (removed gray "Not Targeted")
-
-**File Modified:**
-- `src/backend/app/routes.py` - `export_excel()` function (lines 5628-5949)
-
-**Key Code:**
-```python
-def extract_objective_text(lo_data):
-    """Extract clean objective text from various LO data formats."""
-    if isinstance(lo_data, dict):
-        if 'objective_text' in lo_data:
-            return lo_data['objective_text']
-        # Handle PMT breakdown format
-        if 'process' in lo_data or 'method' in lo_data or 'tool' in lo_data:
-            parts = []
-            if lo_data.get('process'): parts.append(f"[Process] {lo_data['process']}")
-            if lo_data.get('method'): parts.append(f"[Method] {lo_data['method']}")
-            if lo_data.get('tool'): parts.append(f"[Tool] {lo_data['tool']}")
-            return '\n'.join(parts)
-    return str(lo_data) if lo_data else ''
-```
-
-**Progressive Learning Logic:**
-```python
-# Determine highest gap level for progressive learning
-highest_gap_level = 0
-for lvl in [4, 2, 1]:
-    lvl_data = comp_data.get('levels', {}).get(lvl, {})
-    if lvl_data.get('status') == 'training_required' and not lvl_data.get('grayed_out', False):
-        highest_gap_level = lvl
-        break
-
-# If level is below gap level, treat as achieved
-if grayed_out and highest_gap_level > 0 and level_num < highest_gap_level:
-    is_achieved = True
-```
-
-### Server Status
-- Backend: Running on http://127.0.0.1:5000 (background shell 1df038)
-- Frontend: Running on http://localhost:3000
-
-### Testing
-Test the export at: http://localhost:3000/app/phases/2/admin/learning-objectives/results/29
-Click "Export to Excel" - should download `learning_objectives_YYYYMMDD_HHMMSS.xlsx`
-
-### All Session Changes Summary
-1. PMT breakdown for 3 competencies (IVV, Decision Mgmt, Info Mgmt)
-2. Excel export fixes:
-   - Fixed `.excel` -> `.xlsx` extension
-   - Fixed CORS headers for Content-Disposition
-   - Changed to read from cache instead of regenerating
-   - Added support for NEW data format (data.main_pyramid)
-   - Fixed TypeError when LO is dict
-   - Single sheet with Status/Roles/LO per cell
-   - Progressive learning logic
-   - Proper objective_text extraction
-
-
-
----
-
-## Session: 2025-12-03 (Learning Objectives Validation & Code Refactoring)
-
-### What Was Done
-
-#### 1. LO Implementation Validation
-- **Verified Achieved vs Not Targeted logic is CORRECT**
-- Backend (`learning_objectives_core.py:2453-2501`):
-  - `not_targeted` = Level exceeds strategy target (`level > target_level`)
-  - `achieved` = Level within target, user already has it (`level <= target && score >= level`)
-  - `training_required` = Level within target, user needs training (`level <= target && score < level`)
-- Frontend (`SimpleCompetencyCard.vue`) correctly displays:
-  - Green "Achieved" badge with checkmark for `achieved` status
-  - Gray "Not Targeted" badge (no icon) for `not_targeted` status
-  - Yellow card with `X -> Y` progression for `training_required` status
-
-#### 2. Excel Export Fixed (`routes.py:5628-5982`)
-- **Fixed status logic** to match frontend (was showing "Achieved" for "Not Targeted")
-- **Added gray color** for "Not Targeted" cells with italic text
-- **Removed** `(L1)`, `(L2)`, `(L4)` from column headers
-- **Removed** `LO:` prefix and `Status:` text from cells
-- **Added** "Not Targeted" to legend
-- **Fixed text truncation** - removed 500 char limit, increased row height to 200
-- **Added bullet point formatting** for LO texts
-- **Added PMT breakdown display** with `[PROCESS]`, `[METHOD]`, `[TOOL]` labels
-
-#### 3. Code Cleanup - Legacy Files Archived
-Moved unused files to `archive/` folder (not deleted, can restore if needed):
-
-**Backend (`archive/legacy_backend/`):**
-- `learning_objectives_generator.py` (13KB) - never imported anywhere
-- `process_based_matching.py` (6KB) - never imported anywhere
-
-**Frontend (`archive/legacy_frontend_task3/`):**
-| File | Size | Reason |
-|------|------|--------|
-| `AlgorithmExplanationCard.vue` | 101KB | Old LO design, never used |
-| `AlgorithmStep.vue` | 11KB | Only used by above |
-| `ValidationResultsDetail.vue` | 7KB | Only used by above |
-| `ValidationResultsCard.vue` | 6KB | Never imported |
-| `ValidationSummaryCard.vue` | 13KB | Never imported |
-| `CompetencyCard.vue` | 13KB | Replaced by SimpleCompetencyCard |
-| `LearningObjectivesList.vue` | 13KB | Never imported |
-| `LevelTabsNavigation.vue` | 7KB | Replaced by MiniPyramidNav |
-| `ScenarioBarChart.vue` | 2KB | Never imported |
-| `ScenarioDistributionChart.vue` | 8KB | Never imported |
-
-**Total removed: ~200KB of dead code**
-
-### Current Task3 Components (Active - 11 files)
-```
-src/frontend/src/components/phase2/task3/
-├── AddStrategyDialog.vue
-├── AssessmentMonitor.vue
-├── GenerationConfirmDialog.vue
-├── LearningObjectivesView.vue      <-- Main LO results view
-├── LevelContentView.vue
-├── MiniPyramidNav.vue
-├── Phase2Task3Dashboard.vue        <-- Main dashboard
-├── PMTContextForm.vue
-├── PyramidLevelView.vue
-├── RoleBasedObjectivesView.vue
-└── SimpleCompetencyCard.vue        <-- Competency cards
-```
-
-### Component Hierarchy (What's Actually Used)
-```
-Phase2Task3Admin.vue
-└── Phase2Task3Dashboard.vue
-    ├── AssessmentMonitor.vue
-    ├── PMTContextForm.vue
-    ├── GenerationConfirmDialog.vue
-    └── AddStrategyDialog.vue
-
-Phase2Task3Results.vue
-└── LearningObjectivesView.vue
-    ├── PyramidLevelView.vue
-    │   ├── MiniPyramidNav.vue
-    │   └── LevelContentView.vue
-    │       └── SimpleCompetencyCard.vue
-    └── RoleBasedObjectivesView.vue
-```
-
-### Validation Status
-- Validation IS mentioned in design docs but implemented in backend, not these legacy frontend components
-- `LearningObjectivesView.vue` shows validation alerts from backend API response
-- The archived Validation*.vue components were from old design iteration
-
-### Test Results
-- Backend health check: PASS
-- LO API endpoint: PASS (responds correctly)
-- Frontend build: PASS (no errors)
-
-### Files Modified
-- `src/backend/app/routes.py` - Excel export function rewritten
-
-### Files Moved to Archive
-- `src/backend/app/learning_objectives_generator.py` -> `archive/legacy_backend/`
-- `src/backend/app/process_based_matching.py` -> `archive/legacy_backend/`
-- 10 Vue components -> `archive/legacy_frontend_task3/`
-
-### Next Steps / Recommendations
-1. **Test Excel export** in browser for org 29 - verify "Systems Thinking" L4 shows as gray "Not Targeted"
-2. **Consider splitting routes.py** (6,320 lines) - this is still the biggest code organization issue
-3. Files in `archive/` can be permanently deleted after confirming app works correctly
-
-### Running Servers
-- Flask backend: Running on http://localhost:5000
-- Frontend dev server: Not running (use `npm run dev` in src/frontend)
-
-
-
----
-
-## Session: 2025-12-03 (Early Morning) - Excel Export Fix & LO Design Verification
-
-### What Was Done
-
-#### 1. Fixed Excel Export Status Discrepancy
-**Problem**: Excel export showed incorrect status for competencies:
-- "Not Targeted" competencies in frontend were showing as empty green cells (Achieved) in Excel
-- Examples: "Configuration Management" Level 2, "Operation and Support" Level 2, various Level 4 competencies
-
-**Root Cause Analysis**:
-- The Excel export was comparing `target_level` (competency's target from strategies) with `level_num` (column being rendered)
-- When `level_num > target_level`, the competency shouldn't be targeted at that level
-- Original fix only checked `target_level == 0`, missing cases where `level_num > target_level`
-
-**Fix Applied** (routes.py lines 5923-5937):
-```python
-# CRITICAL FIX: Must match frontend SimpleCompetencyCard.vue logic
-# 1. If status is already 'not_targeted', keep it
-# 2. If target_level is 0, this level is NOT TARGETED
-# 3. If level_num > target_level (showing higher level than target), it's NOT TARGETED
-# 4. If current_level >= target_level (and target_level > 0), status should be achieved
-if status == 'not_targeted':
-    pass  # Keep the status as is
-elif target_level == 0:
-    status = 'not_targeted'
-elif level_num > target_level:
-    status = 'not_targeted'
-elif current_level >= target_level:
-    status = 'achieved'
-```
-
-#### 2. Fixed strategy_template_id Not Being Set
-**Problem**: New LearningStrategy records were created without `strategy_template_id`, causing LO generation to fail.
-
-**Fixes Applied**:
-- Added `find_strategy_template_id()` helper function (routes.py ~line 2703)
-- Added `strategy_template_id=template_id` to both existing strategy updates and new strategy creation
-- Created migration `012_fix_strategy_template_ids.sql` for existing data
-
-#### 3. Verified LO Design v5 Implementation
-**Key Design Insights Verified**:
-1. Main pyramid excludes TTT - targets come only from non-TTT strategies
-2. Progressive levels - generate LOs for levels 1 up to target_level
-3. TTT shown separately in Mastery (Level 6) section
-4. "Not Targeted" is an implementation UX choice (not in original design, but useful)
-
-**Strategy Template Targets for Org 49** (Common Basic Understanding + SE for Managers):
-| Competency | Main Target |
-|------------|-------------|
-| Configuration Management | 1 |
-| Operation and Support | 1 |
-| Agile Methods, Customer/Value Orientation, etc. | 2 |
-| Communication, Leadership, Systems Thinking, Decision Mgmt | 4 |
-
-### Files Modified
-- `src/backend/app/routes.py` - Excel export fix (~line 5923-5937), strategy_template_id fix (~line 2760)
-- `src/backend/setup/migrations/012_fix_strategy_template_ids.sql` - Created for data fix
-
-### Current System State
-- Flask backend running on http://127.0.0.1:5000
-- Frontend running (Vite dev server)
-- Database: seqpt_database with seqpt_admin user
-- Test org: 49 (low maturity with 13 users, strategies: TTT, SE for Managers, Common Basic Understanding)
-
-### Next Session: Codebase Refactoring & Organization
-
-**User Request**: Full review of codebase to:
-1. Identify actively used files vs unused/deprecated files
-2. Archive unused files
-3. Refactor large files (especially routes.py which is very large)
-4. Better organize the codebase structure
-
-**Key Areas to Review**:
-1. `src/backend/app/routes.py` - Very large file, needs splitting
-2. `src/backend/app/services/` - Multiple service files, check usage
-3. Root directory - Many temporary/diagnostic files to archive
-4. `data/source/Phase 2/` - Many design documents, may need organization
-5. Frontend components - Check for unused components
-
-**Suggested Approach**:
-1. Generate file tree with line counts
-2. Identify entry points and trace dependencies
-3. Group files by domain/feature
-4. Create archive folder for unused files
-5. Plan routes.py refactoring into domain-specific blueprints
-
-### Pending Items
-- [ ] Full codebase analysis and file organization
-- [ ] routes.py refactoring into smaller modules
-- [ ] Archive unused/temporary files
-- [ ] UX improvement: Warning when assessments incomplete (original todo item)
-
-
-
----
-
-## Session: 2025-12-03 ~05:15 UTC - Routes Refactoring Complete
-
-### What Was Accomplished
-
-#### 1. Full Routes.py Refactoring (6,365 lines split into 8 blueprints)
-
-**Original file backed up to:** `archive/routes_backup_2025-12-03/routes.py`
-
-**New blueprint structure in `src/backend/app/routes/`:**
-
-| File | Lines | Purpose |
-|------|-------|---------|
-| `__init__.py` | 144 | Shared imports, helper functions, blueprint exports |
-| `auth.py` | 246 | Authentication routes (`/mvp/auth/*`, `/auth/*`) |
-| `organization.py` | 344 | Organization management (`/organization/*`) |
-| `phase1_maturity.py` | 108 | Maturity assessment (`/phase1/maturity/*`) |
-| `phase1_roles.py` | 1,653 | Role identification (`/phase1/roles/*`, `/findProcesses`) |
-| `phase1_strategies.py` | 320 | Strategy selection (`/phase1/strategies/*`) |
-| `phase2_assessment.py` | 1,330 | Competency assessment (`/phase2/*`, `/assessment/*`) |
-| `phase2_learning.py` | 1,842 | Learning objectives (`/phase2/learning-objectives/*`) |
-| `main.py` | 607 | Miscellaneous routes |
-
-#### 2. Import Errors Fixed
-
-- **organization.py line 12**: Removed non-existent `QuestionnaireResponse, Questionnaire` from top-level imports (kept lazy imports inside try/except blocks)
-- **__init__.py line 47**: Fixed `UserCompetencySurveyResults` to `UserCompetencySurveyResult` (singular)
-
-#### 3. App __init__.py Updated
-
-Updated `src/backend/app/__init__.py` to register all 8 blueprints:
-```python
-from app.routes.auth import auth_bp
-from app.routes.organization import org_bp
-from app.routes.phase1_maturity import phase1_maturity_bp
-from app.routes.phase1_roles import phase1_roles_bp
-from app.routes.phase1_strategies import phase1_strategies_bp
-from app.routes.phase2_assessment import phase2_assessment_bp
-from app.routes.phase2_learning import phase2_learning_bp
-from app.routes.main import main_bp
-from app.competency_service import competency_service_bp
-```
-
-### Files Archived (from previous session, continued)
-
-- `archive/routes_backup_2025-12-03/routes.py` - Original 6,365-line routes file
-- `archive/rag_experimental_2025-12-03/` - Unused RAG innovation folder
-- `archive/llm_pipeline_duplicates_2025-12-03/` - Duplicate LLM files
-- `archive/utility_scripts_2025-12-03/` - One-time utility scripts
-- `archive/legacy_frontend_views_2025-12-03/` - Unused Vue components (PhaseFour, PhaseTwoLegacy, RAGObjectives)
-
-### Current System State
-
-**Backend Server:**
-- Running on http://127.0.0.1:5000
-- Health check: `{"status":"healthy","service":"SE-QPT Unified Platform"}`
-- All 8 route blueprints registered successfully
-
-**Key Model Notes (for future reference):**
-- `QuestionnaireResponse` and `Questionnaire` models do NOT exist in models.py
-- The actual model is `PhaseQuestionnaireResponse`
-- Code uses lazy imports in try/except blocks that gracefully fail
-- `UserCompetencySurveyResult` is singular (not Results)
-
-### What's NOT Committed
-
-All these changes are uncommitted. Run `git status` to see full list. Key changes:
-- New `src/backend/app/routes/` folder with 9 files
-- Modified `src/backend/app/__init__.py`
-- Archived files in `archive/` folder
-- Modified `src/frontend/src/router/index.js` (removed legacy component imports)
-
-### Next Steps (if continuing)
-
-1. Test frontend with backend to verify all routes work
-2. Consider committing the routes refactoring
-3. Continue with any pending Phase 2 Task 3 work from BACKLOG.md
-
-
-
----
-
-## Session: 2025-12-30 - Process Selection/Deselection Feature Implementation
-
-### What Was Implemented
-
-**Feature**: Process Selection/Deselection for Phase 2 Task-Based Assessment (Ulf's Request)
-- Users can now edit LLM-identified ISO processes after task analysis
-- Can deselect false-positive processes via checkboxes
-- Can change involvement levels (Responsible/Supporting/Designing) via dropdown
-- Can add missed processes from "Add More" expandable section with search
-- Can re-analyze tasks with modified descriptions
-
-### Files Modified
-
-**Backend** (`src/backend/app/routes/phase1_roles.py`):
-- Added `GET /api/iso-processes` - Returns all 30 ISO processes with lifecycle grouping
-- Added `POST /api/updateProcessSelection` - Updates user's modified process selection, re-runs stored procedure
-
-**Frontend** (`src/frontend/src/components/phase2/DerikTaskSelector.vue`):
-- Added state variables: `editableProcesses`, `isEditing`, `allIsoProcesses`, `searchQuery`, `hasModifications`, `isConfirming`
-- Added methods: `enterEditMode()`, `fetchAllIsoProcesses()`, `markModified()`, `addProcess()`, `cancelEdit()`, `reAnalyzeTasks()`, `confirmSelection()`
-- Updated template with edit mode UI (checkboxes, dropdowns, "Add More" section)
-- Added styles for edit mode, disabled/modified card states
-
-### Bug Fix Applied
-
-**Issue**: Process name normalization mismatch between LLM output and database
-- LLM returns: "Verification process" (with " process" suffix)
-- Database stores: "Verification" (without suffix)
-- This caused duplicates in "Add More" section
-
-**Fix**: Added `normalizeProcessName()` function in `availableProcesses` computed property to remove " process" suffix before comparison.
-
-### Database Verification
-
-- Confirmed database has all 30 ISO processes (IDs 1-30)
-- `populate_iso_processes.py` is outdated (only 28 processes) but live DB is correct
-- Data flow verified: Process selection -> unknown_role_process_matrix -> stored procedure -> unknown_role_competency_matrix -> Phase2NecessaryCompetencies display
-
-### Outstanding Issues for Next Session
-
-**CRITICAL: Remote Server LLM Issue**
-- Location: Production server (167.71.52.6 / seqpt.jomongeorge.com)
-- Problem: Task-based assessment `/api/findProcesses` endpoint returns FALLBACK results instead of LLM results
-- Impact: LLM-powered process identification not working on production
-- Investigation needed:
-  1. Check if OpenAI API key is configured in production `.env`
-  2. Check if LLM pipeline dependencies are installed (langchain, openai, faiss-cpu)
-  3. Check Flask logs for import errors or API call failures
-  4. May need to rebuild Docker container with updated dependencies
-
-### Git Status
-
-Changes to commit:
-- `src/backend/app/routes/phase1_roles.py` (new endpoints)
-- `src/frontend/src/components/phase2/DerikTaskSelector.vue` (edit mode feature + bug fix)
-- `src/backend/app/routes.py` (deprecated file - has duplicate endpoints, can be cleaned up later)
-
-### Testing Done
-
-- Backend endpoints tested and working locally
-- Frontend edit mode UI functional
-- Data flow verified with database queries
-- Process -> Competency calculation confirmed correct
-
-### Server Credentials (for deployment)
+#### 2. Applied Migration to Local Database
 
 ```bash
-# SSH to production
-ssh -i .ssh/zangetsu root@167.71.52.6
-# Passphrase: zangetsu
-
-# Deploy commands
-cd /opt/seqpt
-git pull origin master
-docker compose down
-docker compose up --build -d
-docker compose logs -f
+PGPASSWORD=SeQpt_2025 psql -U seqpt_admin -d seqpt_database -f src/backend/setup/migrations/014_phase3_learning_formats.sql
 ```
+
+**Result**: All 7 tables created, 246 seed data rows inserted.
+
+#### 3. Tested Role Mapping Service with Training Program Clusters
+
+Verified the updated LLM prompt correctly assigns both:
+- **SE Role Clusters** (14 clusters for competency profiles)
+- **Training Program Clusters** (6 clusters for Phase 3 training organization)
+
+Test results:
+- Senior Software Developer -> Specialist Developer + Engineers (correct)
+- Engineering Project Manager -> Project Manager + Managers (correct)
+
+#### 4. Created Phase 3 Planning Service
+
+**File**: `src/backend/app/services/phase3_planning_service.py`
+
+Service methods:
+- `get_phase3_config()` - Get/create Phase 3 configuration
+- `get_available_views()` - Determine available training views based on maturity
+- `set_training_structure()` - Set selected view (competency_level or role_clustered)
+- `get_learning_formats()` - Get all 10 learning formats
+- `get_training_modules()` - Get modules from Phase 2 LOs with scaling
+- `evaluate_format_suitability()` - 3-factor suitability check
+- `save_format_selection()` - Save format choice with suitability data
+- `generate_timeline()` - LLM-generated 5 milestones
+- `get_timeline()` - Retrieve stored timeline
+- `get_phase3_output()` - Complete Phase 3 summary
+
+#### 5. Created Phase 3 Routes Blueprint
+
+**File**: `src/backend/app/routes/phase3_planning.py`
+
+API Endpoints:
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/phase3/config/<org_id>` | GET | Get Phase 3 configuration |
+| `/api/phase3/training-structure/<org_id>` | GET | Get training structure options |
+| `/api/phase3/training-structure/<org_id>` | POST | Set training structure view |
+| `/api/phase3/learning-formats` | GET | Get all 10 learning formats |
+| `/api/phase3/training-modules/<org_id>` | GET | Get training modules from Phase 2 |
+| `/api/phase3/evaluate-format` | POST | Evaluate format suitability (3 factors) |
+| `/api/phase3/select-format` | POST | Save format selection |
+| `/api/phase3/generate-timeline` | POST | Generate LLM timeline |
+| `/api/phase3/timeline/<org_id>` | GET | Get stored timeline |
+| `/api/phase3/output/<org_id>` | GET | Get complete Phase 3 output |
+| `/api/phase3/training-clusters` | GET | Get 6 Training Program Clusters |
+| `/api/phase3/training-clusters/<org_id>/distribution` | GET | Get cluster distribution |
+
+#### 6. Registered Blueprint
+
+**File**: `src/backend/app/__init__.py`
+
+Added:
+```python
+from app.routes.phase3_planning import phase3_planning_bp
+app.register_blueprint(phase3_planning_bp, url_prefix='/api')
+```
+
+#### 7. Fixed Database Column Mismatches
+
+Updated service to use correct column names:
+- `responses` instead of `response_data` in `phase_questionnaire_responses`
+- `user_se_competency_survey_results` instead of `user_competency_survey_results`
+
+#### 8. Tested Phase 3 Service
+
+All service methods tested successfully:
+- Learning Formats: 10 formats loaded
+- Phase 3 Config: Created with default view
+- Available Views: Correctly returns based on maturity
+- Training Modules: Scaling calculation works
+- Format Suitability: 3-factor evaluation works
+
+### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `src/backend/app/services/phase3_planning_service.py` | CREATED | Phase 3 business logic (~600 lines) |
+| `src/backend/app/routes/phase3_planning.py` | CREATED | Phase 3 API routes (~250 lines) |
+| `src/backend/app/routes/__init__.py` | MODIFIED | Added phase3_planning_bp export |
+| `src/backend/app/__init__.py` | MODIFIED | Registered phase3_planning_bp |
+
+### Database State
+
+**Phase 3 Tables (all populated/ready):**
+- `learning_format` - 10 rows (formats with properties)
+- `training_program_cluster` - 6 rows (training clusters)
+- `strategy_learning_format_matrix` - 70 rows (strategy-format consistency)
+- `competency_learning_format_matrix` - 160 rows (competency-format levels)
+- `phase3_config` - Created on-demand per org
+- `phase3_training_module` - Empty (ready for user selections)
+- `phase3_timeline` - Empty (ready for LLM-generated milestones)
+
+### Next Steps
+
+1. **Implement Phase 3 Frontend Components**:
+   - Phase 3 Dashboard with 3 tasks
+   - Task 1: Training Structure Selection UI
+   - Task 2: Module list with format dropdown and suitability feedback
+   - Task 3: Timeline visualization (read-only)
+
+2. **Test with Real Organization Data**:
+   - Generate learning objectives for an organization
+   - Test full Phase 3 workflow
+
+3. **Add Export Functionality**:
+   - Excel export for Phase 3 output
+
+### API Testing Notes
+
+To test Phase 3 endpoints:
+```bash
+# Start backend
+cd src/backend && PYTHONPATH=. ./venv/Scripts/python.exe run.py
+
+# Login to get token (need valid user credentials)
+# Then use Bearer token for Phase 3 endpoints
+```
+
+### Current System State
+
+- Flask server: Stopped
+- Database: PostgreSQL running with Phase 3 tables
+- Migration 014: Applied successfully
+
+### Credentials
+
+- Local DB: `seqpt_admin:SeQpt_2025@localhost:5432/seqpt_database`
+- Production: `ssh -i .ssh/zangetsu root@167.71.52.6`
+
+---
+
+*Session ended: 2026-01-03*
+
+
+---
+
+## Session: 2026-01-06 (Phase 3 Fixes, Multi-Strategy, Export, Production Deployment)
+
+### Summary
+Major Phase 3 implementation verification, bug fixes, multi-strategy support, Excel export feature, and production deployment with critical fixes.
+
+### Key Accomplishments
+
+#### 1. Phase 3 Implementation Analysis & Fixes
+- Verified Phase 3 implementation against specification v3.2
+- Fixed undefined `logger` in `complete_task2` route (changed to `current_app.logger`)
+- Fixed milestone field name mismatch (`name` vs `milestone_name`) between backend and frontend
+- Fixed strategy lookup to use `learning_strategy` table instead of unreliable name matching
+- Fixed `get_phase3_output()` to pass `view_type` parameter for proper Role-Clustered data
+
+#### 2. Multi-Strategy Support (Weighted Aggregation)
+- Implemented weighted evaluation for Factor 3 (Strategy Consistency)
+- PRIMARY strategy: weight = 2, SUPPLEMENTARY: weight = 1
+- Scoring: `++` = 2pts, `+` = 1pt, `--` = 0pts
+- Thresholds: >= 1.5 Green, >= 0.5 Yellow, < 0.5 Red
+- Added `_get_all_strategies()` method to phase3_planning_service.py
+- Updated timeline context to show all selected strategies
+- Frontend shows "Strategy (+N more)" with tooltip for multiple strategies
+
+#### 3. Excel Export Feature
+- **Endpoint**: `GET /api/phase3/export/<organization_id>`
+- Single sheet with Summary + Training Modules + Timeline
+- Role-Clustered view: groups by Training Program with merged cells
+- Training Module column combines "Competency - PMT Type" (or just Competency if combined)
+- Only available after all 3 tasks complete
+- Export button added to Phase 3 overview page (PhaseThree.vue)
+
+#### 4. Production Deployment
+- **Commit**: `778c45ab` - Phase 3 frontend & enhancements + missing migration
+- Applied migrations on server:
+  - 013: `organization_existing_trainings` table
+  - 015: `training_program_cluster_id` to `phase3_training_module`
+  - 016: `phase2_completed` and `phase3_completed` to `organization`
+
+#### 5. Production Environment Fixes
+- **Fixed .env stashing issue**: Untracked .env from git on server (`git rm --cached .env`)
+- **Fixed database password mismatch**: Changed from `SeQpt_Prod_2025_Secure` to `SeQpt_2025`
+- **Fixed OPENAI_API_KEY not loading**: Force recreated containers to pick up env vars
+- **Future `git pull` will NOT affect .env anymore**
+
+### Files Modified
+
+**Backend:**
+- `src/backend/app/routes/phase3_planning.py` - Export endpoint, logger fix
+- `src/backend/app/services/phase3_planning_service.py` - Multi-strategy, field names, strategy lookup
+- `src/backend/setup/migrations/013_create_existing_trainings.sql` (NEW)
+- `src/backend/setup/migrations/015_add_cluster_to_training_module.sql`
+- `src/backend/setup/migrations/016_add_phase2_completed.sql`
+- `src/backend/setup/migrations/017_add_cluster_to_org_roles.sql`
+
+**Frontend:**
+- `src/frontend/src/views/phases/PhaseThree.vue` - Export button, redirect to dashboard
+- `src/frontend/src/components/phase3/task3/TimelinePlanning.vue` - Multi-strategy display, milestone validation
+- `src/frontend/src/components/phase2/task3/ExistingTrainingsSelector.vue` (was missing, now committed)
+
+### Production Server Status
+- **URL**: http://seqpt.jomongeorge.com / http://167.71.52.6
+- **All containers**: Running & Healthy
+- **Database**: `seqpt_database` with password `SeQpt_2025`
+- **OPENAI_API_KEY**: Properly set in container
+- **.env**: Untracked from git (will persist across pulls)
+
+### Known Issues Resolved
+| Issue | Resolution |
+|-------|------------|
+| Timeline "Data Incomplete" warning | Fixed field name: `name` -> `milestone_name` |
+| Role-Clustered export shows "Uncategorized" | Fixed: pass `view_type` to `get_training_modules()` |
+| Strategy lookup fails with name mismatches | Fixed: use `learning_strategy.strategy_template_id` |
+| Server login 500 error | Fixed: database password mismatch in .env |
+| .env gets stashed on git pull | Fixed: untracked .env from git on server |
+| LLM not connecting on server | Fixed: force recreate container to load OPENAI_API_KEY |
+
+### Database Credentials (Production)
+```
+Host: db (Docker internal) / 167.71.52.6:5432 (external)
+Database: seqpt_database
+User: seqpt_admin
+Password: SeQpt_2025
+```
+
+### Next Steps / Pending
+1. Phase 3 specification documents in `data/source/Phase 3/` not committed (optional)
+2. Consider adding thesis documentation files to repo (optional)
+
+### Commands Reference
+```bash
+# SSH to server
+ssh -i .ssh/zangetsu root@167.71.52.6
+
+# Deploy updates
+cd /opt/seqpt && git pull origin master && docker compose up --build -d
+
+# Apply migration
+cat src/backend/setup/migrations/XXX.sql | docker exec -i seqpt-db psql -U seqpt_admin -d seqpt_database
+
+# Check logs
+docker logs seqpt-backend --tail 50
+
+# Restart with new env
+docker compose up -d --force-recreate backend
+```
+
+---
+
+
+---
+
+## Session: 2026-01-30 - Phase 4 RFP Export Refinements
+
+### Summary
+Continued refinement of the Phase 4 RFP (Request for Proposal) export feature based on user feedback. Removed unnecessary fields and sections, fixed data display issues, and improved UI behavior.
+
+### Changes Made
+
+#### Backend (src/backend/app/services/phase4_rfp_service.py)
+
+1. **Removed AVIVA Plans from RFP export**
+   - Removed aviva_plans from get_rfp_data() return value
+   - Removed AVIVA sheet from Excel export
+   - Changed include_aviva default to False
+
+2. **Assessment Pathway now shows full text**
+   - Changed from short codes "TASK_BASED" / "ROLE_BASED" to full descriptions:
+     - "Task-based competency assessment"
+     - "Role-based competency assessment"
+
+3. **Removed "Confirmed Modules" from Summary sheet**
+   - Removed from Program Scope section (unnecessary since all modules are confirmed)
+
+4. **Training Modules sheet improvements**
+   - Removed "Confirmed" column
+   - Removed "PMT Type" column
+   - Fixed Format field (now properly retrieves from selected_format.format_name)
+   - Changed sorting from name ascending to module ID
+
+#### Frontend (src/frontend/src/views/phases/PhaseFour.vue)
+
+1. **Removed AVIVA Plans section from RFP preview**
+   - Removed the collapsible AVIVA Plans section
+   - Removed "Include AVIVA Plans" checkbox from export options
+   - Removed unused rfpIncludeAviva state variable
+
+2. **Removed "Confirmed" modules row from Training Program card**
+
+3. **Fixed sticky export panel overlapping issue**
+   - Added padding-bottom: 180px to .rfp-sections to create space for the sticky panel
+   - Added z-index: 100 to .export-panel to ensure it stays above scrolling content
+
+### Test Results
+```
+Sheets: ['Summary', 'Maturity Assessment', 'Organization Roles', 'Training Modules', 'Timeline']
+Has 'AVIVA Plans' sheet: False
+Assessment Pathway: 'Task-based competency assessment' (full text)
+Headers: ['#', 'Training Program', 'Type', 'Module', 'Level', 'Format', 'Est. Participants']
+Has 'Confirmed' column: False
+Has 'PMT Type' column: False
+
+Format values now show correctly:
+  - 'Webinar / Live Online Event'
+  - 'Web-Based Training (WBT)'
+```
+
+### Files Modified
+- src/backend/app/services/phase4_rfp_service.py - RFP data aggregation and Excel export
+- src/frontend/src/views/phases/PhaseFour.vue - Phase 4 UI components
+
+### Current State
+- Backend running: Check with tasklist | findstr python
+- Frontend built successfully
+- All RFP export features working correctly
+- Export panel no longer overlaps with content when scrolling
+
+### Previous Session Context
+This session continued from earlier work on Phase 4 RFP export that included:
+- Removing Gap Analysis section (redundant with Training Modules)
+- Removing "Method" column from Organization Roles
+- Fixing PMT Context formatting (was showing character-by-character)
+- Fixing Maturity Assessment scores and descriptions
+- Fixing SE Roles & Processes to show X/6 scale
 

@@ -18,7 +18,7 @@
         </template>
         <template #default>
           <p>
-            Based on your organization's maturity level ({{ maturityLevel }}),
+            Based on your organization's maturity score ({{ maturityLevel }}%),
             training modules are organized by <strong>competency and level</strong>.
             This approach brings together all roles that need the same competency training.
           </p>
@@ -55,7 +55,7 @@
         <h2>How do you want to structure your training program?</h2>
       </div>
       <p class="question-description">
-        Your organization has high SE maturity (Level {{ maturityLevel }}) with defined roles.
+        Your organization has high SE maturity ({{ maturityLevel }}%) with defined roles.
         Choose how you want to organize the training modules:
       </p>
 
