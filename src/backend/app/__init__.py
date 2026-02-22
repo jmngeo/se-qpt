@@ -35,13 +35,22 @@ def create_app(config_name='development'):
     # DEBUG: Log database connection
     print(f"[DATABASE] Using: {app.config['SQLALCHEMY_DATABASE_URI']}")
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-string')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=8)
 
     # OpenAI Configuration
     app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
 
     # File upload configuration
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+    # SQLAlchemy connection pool settings (prevents stale connections under concurrency)
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 5,           # Max persistent connections
+        'max_overflow': 10,       # Extra connections under load
+        'pool_timeout': 30,       # Wait max 30s for a connection
+        'pool_recycle': 1800,     # Recycle connections every 30 min
+        'pool_pre_ping': True,    # Verify connections before use
+    }
 
     # Initialize extensions with app (db is already imported at module level)
     db.init_app(app)
@@ -54,7 +63,8 @@ def create_app(config_name='development'):
              'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
              'http://localhost:3003', 'http://localhost:3004', 'http://localhost:5173',
              'http://127.0.0.1:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:3002',
-             'http://127.0.0.1:3003', 'http://127.0.0.1:3004', 'http://127.0.0.1:5173'
+             'http://127.0.0.1:3003', 'http://127.0.0.1:3004', 'http://127.0.0.1:5173',
+             'http://167.71.52.6', 'http://seqpt.jomongeorge.com',
          ],
          allow_headers=['Content-Type', 'Authorization'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

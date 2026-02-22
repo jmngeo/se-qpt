@@ -43,13 +43,19 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 800M
+          memory: 1024M
         reservations:
-          memory: 400M
+          memory: 512M
 
   # Vue.js Frontend
   frontend:
@@ -60,7 +66,14 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
     restart: unless-stopped
     deploy:
       resources:
