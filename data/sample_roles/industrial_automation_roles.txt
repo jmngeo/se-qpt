@@ -1,0 +1,106 @@
+Industrial Automation Company - Role Descriptions
+=================================================
+
+ROLE: Control Systems Engineer
+------------------------------
+Description: Designs and implements industrial control systems for manufacturing and process industries. Develops PLC and DCS solutions.
+
+Responsibilities:
+- Design control system architectures
+- Program PLCs and DCS controllers
+- Develop HMI/SCADA interfaces
+- Conduct factory acceptance testing
+- Commission control systems at customer sites
+- Troubleshoot control system issues
+
+Required Skills: PLC Programming (Siemens, Allen-Bradley), DCS, SCADA, Ladder Logic, Process Control
+
+
+ROLE: Automation Engineer
+-------------------------
+Description: Develops automation solutions to improve manufacturing efficiency. Integrates robots, sensors, and control systems.
+
+Responsibilities:
+- Design automated production systems
+- Program industrial robots
+- Integrate vision systems and sensors
+- Optimize production line performance
+- Conduct cycle time analysis
+- Support production ramp-up
+
+Required Skills: Robot Programming, Vision Systems, PLC, CAD, Lean Manufacturing, OEE Analysis
+
+
+ROLE: Electrical Design Engineer
+--------------------------------
+Description: Designs electrical systems for industrial equipment. Creates schematics, panel layouts, and documentation.
+
+Responsibilities:
+- Design electrical schematics and panel layouts
+- Select electrical components (motors, drives, sensors)
+- Create bills of materials
+- Develop wiring diagrams
+- Support panel manufacturing
+- Ensure compliance with electrical codes
+
+Required Skills: EPLAN, AutoCAD Electrical, Motor/Drive Selection, Electrical Codes (NEC, IEC), Panel Design
+
+
+ROLE: Mechatronics Engineer
+---------------------------
+Description: Integrates mechanical, electrical, and software systems. Develops smart machines and automated equipment.
+
+Responsibilities:
+- Design mechatronic systems
+- Integrate sensors and actuators
+- Develop motion control solutions
+- Prototype and test designs
+- Optimize system performance
+- Support product development
+
+Required Skills: Mechanical Design, Embedded Systems, Motion Control, Sensors, CAD, Simulation
+
+
+ROLE: Field Service Engineer
+----------------------------
+Description: Provides on-site technical support for installed automation systems. Performs maintenance and troubleshooting.
+
+Responsibilities:
+- Install and commission automation systems
+- Perform preventive maintenance
+- Troubleshoot and repair equipment
+- Train customer operators
+- Provide technical support
+- Document service activities
+
+Required Skills: PLC Troubleshooting, Electrical Systems, Mechanical Systems, Customer Service, Technical Documentation
+
+
+ROLE: Application Engineer
+--------------------------
+Description: Develops application-specific solutions for customers. Bridges technical capabilities with customer requirements.
+
+Responsibilities:
+- Understand customer application requirements
+- Develop technical solutions and proposals
+- Configure and customize products
+- Conduct demonstrations and training
+- Support sales team technically
+- Create application documentation
+
+Required Skills: Application Development, Technical Sales, Customer Interface, Product Knowledge, Presentations
+
+
+ROLE: SCADA/MES Engineer
+------------------------
+Description: Develops supervisory control and manufacturing execution systems. Integrates plant floor data with enterprise systems.
+
+Responsibilities:
+- Design and implement SCADA systems
+- Develop MES solutions
+- Create data collection and reporting systems
+- Integrate with ERP systems
+- Optimize production visibility
+- Ensure cybersecurity compliance
+
+Required Skills: SCADA Platforms, MES, SQL Databases, OPC, Data Analytics, Industrial Cybersecurity

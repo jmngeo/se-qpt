@@ -1,0 +1,91 @@
+Automotive Engineering Company - Role Descriptions
+===================================================
+
+ROLE: Vehicle Systems Engineer
+------------------------------
+Description: Leads the integration of complex vehicle systems including powertrain, chassis, and electronics. Ensures all subsystems work together to meet vehicle-level requirements.
+
+Responsibilities:
+- Define vehicle-level system requirements and architecture
+- Coordinate integration of multiple subsystems (powertrain, ADAS, body electronics)
+- Perform system-level verification and validation testing
+- Manage interfaces between hardware, software, and mechanical systems
+- Conduct trade studies for system optimization
+- Support vehicle launch activities
+
+Required Skills: Vehicle Architecture, ISO 26262, CAN/LIN protocols, DOORS, Requirements Engineering, V-Model
+
+
+ROLE: Embedded Software Engineer
+--------------------------------
+Description: Develops embedded software for automotive electronic control units (ECUs). Ensures software meets functional safety and quality standards.
+
+Responsibilities:
+- Design and implement embedded C/C++ software for ECUs
+- Develop software according to AUTOSAR standards
+- Perform unit testing and software integration
+- Debug hardware-software interface issues
+- Participate in FMEA and safety analysis
+- Document software design and test results
+
+Required Skills: Embedded C/C++, AUTOSAR, RTOS, CAN/LIN, Debugging Tools, ISO 26262, MISRA C
+
+
+ROLE: Calibration Engineer
+--------------------------
+Description: Optimizes vehicle performance through parameter tuning and calibration. Works closely with test drivers and simulation teams.
+
+Responsibilities:
+- Calibrate engine, transmission, and vehicle dynamics parameters
+- Conduct dyno and vehicle testing
+- Analyze test data and optimize performance
+- Develop calibration strategies for different markets
+- Support emissions compliance testing
+- Maintain calibration databases
+
+Required Skills: INCA, CANape, MATLAB, Engine Calibration, Data Analysis, Vehicle Dynamics
+
+
+ROLE: ADAS Development Engineer
+-------------------------------
+Description: Develops Advanced Driver Assistance Systems including sensor fusion, perception, and control algorithms.
+
+Responsibilities:
+- Develop perception and sensor fusion algorithms
+- Implement ADAS control strategies (ACC, AEB, LKA)
+- Conduct simulation and HIL testing
+- Analyze field data and improve algorithm performance
+- Ensure functional safety compliance
+- Collaborate with hardware and integration teams
+
+Required Skills: Python, C++, ROS, Sensor Fusion, Machine Learning, Functional Safety, dSPACE/HIL
+
+
+ROLE: Powertrain Engineer
+-------------------------
+Description: Designs and develops powertrain systems including engines, transmissions, and electric drivetrains.
+
+Responsibilities:
+- Design powertrain components and systems
+- Perform CAE analysis (thermal, structural, NVH)
+- Support prototype build and testing
+- Optimize efficiency and performance
+- Manage supplier technical interfaces
+- Support production launch
+
+Required Skills: Powertrain Design, Thermodynamics, CAE Tools, DFMEA, GD&T, Supplier Management
+
+
+ROLE: Test Engineer
+-------------------
+Description: Plans and executes vehicle and component testing to validate requirements. Manages test facilities and equipment.
+
+Responsibilities:
+- Develop test plans and procedures
+- Set up and operate test equipment
+- Execute durability and performance tests
+- Analyze test data and write reports
+- Maintain test facilities and equipment
+- Support root cause analysis
+
+Required Skills: Test Planning, Data Acquisition, Test Equipment, Statistical Analysis, Technical Writing

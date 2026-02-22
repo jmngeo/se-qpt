@@ -1,0 +1,70 @@
+List of Data elements in the app to create a dependency matrix.
+
+
+
+Organization's SE Maturity - Defined in Phase 1 - Calculated from 4 field of actions input.
+
+Training Target Group Size - Defined in Phase 1
+
+Roles - Defined in Phase 1. They are the Organization's roles. The roles are defined/mapped to SE Role Clusters only if the org's SE Maturity is high.
+
+14 SE Role Clusters  - used in Phase 1 -> Org roles mapped to SE Role clusters based on Role descriptions and tasks using GenAI. Roles that do not have a relevant match to the 14 Role clusters are marked as Custom roles.
+
+ISO Processes - 30 processes to which involvement levels will be defined for each role in the Role-Process matrix definition task.
+
+Role-Process matrix  - Defined in Phase 1 -> For roles that are mapped to one of the 14 SE Role clusters, the baseline values for the 30 ISO Processes are derived for each of the roles. Uses GenAI to create baseline values for processes for custom roles. 
+
+Process-Competency matrix - A global standardized matrix that affects all organizations. Only defined if the org's SE Maturity is high.
+
+Role-Competency matrix - Computed automatically in the backend from the above 2 matrices (also define the relationship formula here).
+
+Qualification/training Strategies - Defined in Phase 1 -> There are 7 strategies in total. From the maturity assessment result, if the org has low maturity (no defined or established se roles and processes), then the strategy "SE for Managers" recommended as primary strategy, then choose between one of the 3 strategies as the secondary strategy. If org has high maturity, and based on SE Rollout scope, choose between one of the 2 strategies. If the "Training Target Group Size" is greater than 100 people, also recommends to choose Train the trainer strategy.
+
+Competency - used in Phase 2 in Competency Assessment, Learning Objectives generation, and in Phase 3 Modules -> 16 SE competencies.
+
+Competency Levels - levels in each Competency. values -> 0,1,2,4,6. 
+
+Competency Assessment - in Phase 2 -> used to assess the competencies in users and identify gaps. If high maturity, Role-based assessment happens here. The Roles identified/defined in Phase 1 is used here for users to select their roles in the competency assessment. During competency assessment, the required competencies and their levels are determined from the selected roles during assessment using the role-competency matrix. If low maturity, Task-based assessment happens here. Instead of selection of roles, the user describes their tasks in the organization with their involvement levels (Support, Responsible, Design) and the system uses RAG based GenAI to calculate the user's involvement levels in the 30 ISO processes. Upon confirmation, the required competencies for the user for participating in Competency assessment is calculated using unknown-role-competency matrix.
+
+Learning Objectives - in Phase 2 ->  uses data from selected training strategies, competency gaps data from all the user's competency assessment in the org, "Existing Training Check", PMT (Organization SE Practices), learning objectives templates. if high maturity, the competency gaps for each role is calculated from the role requirement (from role-competency matrix) and also from the target competency levels defined from the selected strategy. If any role in the org has a gap for a given competency level, the training requirement is identified for that competency level and generates Learning Objectives. (Claude todo: check for correctness for Learning Objectives mechanism by analysing the app.). And for each identified competency level gap, a corresponding learning objective is generated using the corresponding learning objective template and also customizing it with PMT using GenAI wherever applicable. If low maturity org, the the gap identification is done only using the strategy target levels and no role requirement levels (since no roles defined for low maturity org). For competency levels that the org already has existing trainings, those are excluded from learning objectives and training modules.
+
+Learning objectives templates (StrategyTemplateCompetency) - present in the form of a strategy-competency-level matrix. It contains a mix of Process-Method-Tool distinct Learning objectives data for some of the competencies. It contains Target levels per strategy (112 entries).
+
+PMT - The data regarding processes, methods, tools being used in the org currently. Uses GenAI to extract these data from org's documentations. If org has high maturity, and have selected a training strategy from one of the 2 high-maturity based strategies, the system asks admin user to input this PMT data. If org has low maturity, this PMT input process is skipped and uses the standardized templates of learning objectives for the selected training strategy.  
+
+Existing Training Check - Inputs the competencies and their specific levels for which the training exists already in the org.
+
+Training modules - in Phase 3 -> For each of the training requirement identified as a competency level in Learning Objectives task in Phase 2, a training module depicting that competency level is listed.
+
+Training structure - in Phase 3 -> If high maturity org, the user can choose between Competency-level based training or Role-Clustered based training. If low maturity, the only training structure is Competency-level based training.
+
+TrainingProgramCluster - in Phase 2 -> the roles identified for training based on the competency gaps are assigned to one of the 3 training programs using the formula - SE for Engineers: Roles needing Applying/Mastering in Technical or Core SE areas. Includes Common Base + Role-Specific Pathways. SE for Managers: Roles needing Applying/Mastering only in Social/Personal or Management areas. SE for Interfacing Partners: Roles needing only Knowing/Understanding level competency.
+
+Learning Formats - in Phase 3 -> 10 delivery formats (Seminar, Coaching, etc.). For each training module, user selects one learning format. For each learning format, the suitability analysis of that format is done using the 3 parameters - Participants count (derived as a scaled value based on number of roles with competency level gaps in that module and the Training Target Group Size data from Phase 1), Level Achievable (from CompetencyLearningFormatMatrix), and Strategy Fit (from StrategyLearningFormatMatrix). Each format also lists their Advantages, disadvantages, and SE Relevance.
+
+StrategyLearningFormatMatrix - Strategy ↔ Format consistency (++, +, --).
+
+CompetencyLearningFormatMatrix - Competency ↔ Format max achievable level.
+
+Timeline - GenAI generated milestones based on modules count, Training Target Group Size, training strategy and the learning formats selected.
+
+Organization - The organization for whom the SE Qualification plan is being generated.
+
+User - 2 user types - Admin, Employee. Admin needs to do all the phases and tasks of the app, while the employee users need to only do their Competency assessments.
+
+
+In your listed Data Entities overview, there are some mistakes. TrainingProgramCluster - only 3 instead of 6 training delivery cohorts. Maturity Questions - only 4 questions being used and not 33 questions. Identify the source of this 33 questions and remove it safely.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

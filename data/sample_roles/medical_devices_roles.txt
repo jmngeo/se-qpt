@@ -1,0 +1,106 @@
+Medical Device Company - Engineering Roles
+==========================================
+
+ROLE: Medical Device Systems Engineer
+-------------------------------------
+Description: Designs and develops complex medical device systems ensuring safety, efficacy, and regulatory compliance. Leads cross-functional teams through the product development lifecycle.
+
+Responsibilities:
+- Define system architecture for medical devices
+- Develop system requirements and specifications
+- Conduct risk analysis per ISO 14971
+- Lead design reviews and technical decision-making
+- Ensure design history file (DHF) compliance
+- Support regulatory submissions (510(k), PMA)
+
+Required Skills: Medical Device Design, ISO 13485, ISO 14971, IEC 62304, FDA Regulations, Systems Engineering
+
+
+ROLE: Biomedical Engineer
+-------------------------
+Description: Applies engineering principles to healthcare and medicine. Develops devices that improve patient outcomes.
+
+Responsibilities:
+- Design medical devices and equipment
+- Conduct biocompatibility assessments
+- Perform clinical testing and validation
+- Collaborate with physicians and clinicians
+- Analyze physiological signals and data
+- Support product usability studies
+
+Required Skills: Physiology, Biomaterials, Signal Processing, Clinical Trials, Usability Engineering
+
+
+ROLE: Embedded Firmware Engineer
+--------------------------------
+Description: Develops firmware for medical device embedded systems. Ensures software meets IEC 62304 requirements.
+
+Responsibilities:
+- Design and implement embedded firmware
+- Develop software per IEC 62304 lifecycle
+- Conduct unit testing and code reviews
+- Debug hardware-software integration issues
+- Maintain software documentation
+- Support software validation activities
+
+Required Skills: Embedded C, RTOS, IEC 62304, Software V&V, Debugging, Medical Device Standards
+
+
+ROLE: Quality Engineer
+----------------------
+Description: Ensures medical devices meet quality and regulatory requirements. Manages quality systems and compliance.
+
+Responsibilities:
+- Maintain ISO 13485 quality management system
+- Conduct internal audits and CAPA management
+- Review design documentation for compliance
+- Manage supplier quality
+- Support FDA inspections and audits
+- Track and analyze quality metrics
+
+Required Skills: ISO 13485, FDA QSR, CAPA, Internal Auditing, Supplier Quality, Statistical Methods
+
+
+ROLE: Regulatory Affairs Specialist
+-----------------------------------
+Description: Manages regulatory submissions and ensures compliance with global medical device regulations.
+
+Responsibilities:
+- Prepare and submit 510(k) and PMA applications
+- Track regulatory requirements globally (FDA, CE, PMDA)
+- Review product labeling and IFU
+- Coordinate with notified bodies
+- Monitor regulatory changes
+- Support post-market surveillance
+
+Required Skills: FDA 510(k), CE Marking, MDR, Technical Writing, Regulatory Strategy
+
+
+ROLE: Verification & Validation Engineer
+-----------------------------------------
+Description: Plans and executes V&V activities to demonstrate medical device safety and effectiveness.
+
+Responsibilities:
+- Develop V&V master plans and protocols
+- Execute software and system testing
+- Perform usability testing
+- Conduct electrical safety testing
+- Document test results and deviations
+- Support design transfer activities
+
+Required Skills: V&V Planning, Test Protocol Development, IEC 60601, Usability Testing, Statistical Analysis
+
+
+ROLE: Manufacturing Engineer
+----------------------------
+Description: Develops manufacturing processes for medical devices. Ensures production meets quality and efficiency targets.
+
+Responsibilities:
+- Design manufacturing processes and tooling
+- Conduct process validation (IQ/OQ/PQ)
+- Implement lean manufacturing practices
+- Support production troubleshooting
+- Manage equipment qualification
+- Drive continuous improvement
+
+Required Skills: Process Validation, Lean Manufacturing, GMP, Statistical Process Control, Equipment Qualification

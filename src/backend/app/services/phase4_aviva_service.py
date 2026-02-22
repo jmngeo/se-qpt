@@ -1046,6 +1046,16 @@ Return ONLY a valid JSON array with content for each row:
                     'format_label': format_label,
                 })
 
+        # After packing, re-sort modules within each day by
+        # (subcluster, competency_id, target_level) so the display order is
+        # consistent with Summary, Training Modules, and AVIVA Plans sheets.
+        for day in days:
+            day['modules'].sort(key=lambda m: (
+                m.get('subcluster') or 'z',
+                m.get('competency_id', 0),
+                m.get('target_level', 0),
+            ))
+
         return days
 
     def _generate_daily_schedule(
@@ -1091,6 +1101,7 @@ Return ONLY a valid JSON array with content for each row:
             level = plan.get('target_level', 0)
             return {
                 'module_name': plan.get('module_name', ''),
+                'competency_id': plan.get('competency_id', 0),
                 'competency_name': plan.get('competency_name', ''),
                 'target_level': level,
                 'level_name': self._get_level_name(level),
@@ -1129,60 +1140,86 @@ Return ONLY a valid JSON array with content for each row:
             if not section_modules:
                 continue
 
-            # Sub-group by learning format (G2)
-            def format_sort_key(m):
-                return m.get('learning_format', '') or ''
+            # ---------------------------------------------------------------
+            # PREVIOUS APPROACH: Sub-group by learning format, pack each
+            # format group separately, then merge under-filled days.
+            # Replaced with competency-based sorting to unify module
+            # ordering across all sheets (Summary, Training Modules,
+            # AVIVA Plans, and Training Schedule).
+            # ---------------------------------------------------------------
+            # # Sub-group by learning format (G2)
+            # def format_sort_key(m):
+            #     return m.get('learning_format', '') or ''
+            #
+            # sorted_by_format = sorted(section_modules, key=format_sort_key)
+            # format_groups = {}
+            # for fmt, grp_iter in groupby(sorted_by_format, key=format_sort_key):
+            #     grp = list(grp_iter)
+            #     # Derive a day label from the format
+            #     fmt_lower = (fmt or '').lower()
+            #     if 'seminar' in fmt_lower:
+            #         day_label = 'Seminar Day'
+            #     elif 'webinar' in fmt_lower:
+            #         day_label = 'Webinar Day'
+            #     elif 'coaching' in fmt_lower:
+            #         day_label = 'Coaching Day'
+            #     elif 'wbt' in fmt_lower or 'web-based' in fmt_lower:
+            #         day_label = 'WBT Day'
+            #     elif 'blended' in fmt_lower:
+            #         day_label = 'Blended Day'
+            #     else:
+            #         day_label = 'Training Day'
+            #     format_groups[fmt] = {'modules': grp, 'day_label': day_label}
+            #
+            # # Pack each format group
+            # all_days = []
+            # for fmt, fg in format_groups.items():
+            #     packed = self._pack_modules_into_days(fg['modules'], fg['day_label'])
+            #     all_days.extend(packed)
+            #
+            # # Merge under-filled days (< 4h) across format groups
+            # under_filled = [d for d in all_days if d['total_minutes'] < self.MERGE_THRESHOLD_MINUTES]
+            # full_days = [d for d in all_days if d['total_minutes'] >= self.MERGE_THRESHOLD_MINUTES]
+            #
+            # merged_days = []
+            # while under_filled:
+            #     day = under_filled.pop(0)
+            #     merged = True
+            #     while merged and under_filled:
+            #         merged = False
+            #         for i, candidate in enumerate(under_filled):
+            #             if day['total_minutes'] + candidate['total_minutes'] <= self.DAY_CAPACITY_MINUTES:
+            #                 day['modules'].extend(candidate['modules'])
+            #                 day['total_minutes'] += candidate['total_minutes']
+            #                 day['format_label'] = 'Mixed'
+            #                 under_filled.pop(i)
+            #                 merged = True
+            #                 break
+            #     merged_days.append(day)
+            #
+            # all_days = full_days + merged_days
+            #
+            # # Sort days: full days first (by total_minutes desc), then merged
+            # all_days.sort(key=lambda d: d['total_minutes'], reverse=True)
+            # ---------------------------------------------------------------
 
-            sorted_by_format = sorted(section_modules, key=format_sort_key)
-            format_groups = {}
-            for fmt, grp_iter in groupby(sorted_by_format, key=format_sort_key):
-                grp = list(grp_iter)
-                # Derive a day label from the format
-                fmt_lower = (fmt or '').lower()
-                if 'seminar' in fmt_lower:
-                    day_label = 'Seminar Day'
-                elif 'webinar' in fmt_lower:
-                    day_label = 'Webinar Day'
-                elif 'coaching' in fmt_lower:
-                    day_label = 'Coaching Day'
-                elif 'wbt' in fmt_lower or 'web-based' in fmt_lower:
-                    day_label = 'WBT Day'
-                elif 'blended' in fmt_lower:
-                    day_label = 'Blended Day'
-                else:
-                    day_label = 'Training Day'
-                format_groups[fmt] = {'modules': grp, 'day_label': day_label}
+            # NEW APPROACH: Sort modules by (subcluster, competency_id, target_level)
+            # consistent with Summary, Training Modules, and AVIVA Plans sheets.
+            # Subcluster ensures 'common' before 'pathway' within each section.
+            sorted_modules = sorted(section_modules, key=lambda m: (
+                m.get('subcluster') or 'z',  # 'common' before 'pathway'
+                m.get('competency_id', 0),
+                m.get('target_level', 0),
+            ))
+            all_days = self._pack_modules_into_days(sorted_modules, 'Training Day')
 
-            # Pack each format group
-            all_days = []
-            for fmt, fg in format_groups.items():
-                packed = self._pack_modules_into_days(fg['modules'], fg['day_label'])
-                all_days.extend(packed)
-
-            # Merge under-filled days (< 4h) across format groups
-            under_filled = [d for d in all_days if d['total_minutes'] < self.MERGE_THRESHOLD_MINUTES]
-            full_days = [d for d in all_days if d['total_minutes'] >= self.MERGE_THRESHOLD_MINUTES]
-
-            merged_days = []
-            while under_filled:
-                day = under_filled.pop(0)
-                merged = True
-                while merged and under_filled:
-                    merged = False
-                    for i, candidate in enumerate(under_filled):
-                        if day['total_minutes'] + candidate['total_minutes'] <= self.DAY_CAPACITY_MINUTES:
-                            day['modules'].extend(candidate['modules'])
-                            day['total_minutes'] += candidate['total_minutes']
-                            day['format_label'] = 'Mixed'
-                            under_filled.pop(i)
-                            merged = True
-                            break
-                merged_days.append(day)
-
-            all_days = full_days + merged_days
-
-            # Sort days: full days first (by total_minutes desc), then merged
-            all_days.sort(key=lambda d: d['total_minutes'], reverse=True)
+            # Sort days by the earliest (subcluster, competency_id, target_level) they
+            # contain, so common-base modules come first, and lower-level modules of
+            # earlier competencies appear on earlier days.
+            all_days.sort(key=lambda d: min(
+                (m.get('subcluster') or 'z', m.get('competency_id', 0), m.get('target_level', 0))
+                for m in d['modules']
+            ))
 
             # Assign day numbers and calendar dates, compute per-module times
             section_days = []
@@ -1314,9 +1351,9 @@ Return ONLY a valid JSON array with content for each row:
         }
         PKG_HEADER_FONT = Font(bold=True, size=11)
 
-        # Column layout
-        col_headers = ['Day #', 'Date', 'Time', 'Module', 'Level', 'Format', 'Duration']
-        col_widths = [7, 16, 14, 45, 14, 28, 11]
+        # Column layout (Date column removed - only Day # is shown)
+        col_headers = ['Day #', 'Time', 'Module', 'Level', 'Format', 'Duration']
+        col_widths = [22, 14, 45, 14, 28, 11]
         num_cols = len(col_headers)
 
         # Set column widths
@@ -1392,16 +1429,11 @@ Return ONLY a valid JSON array with content for each row:
             # Days
             for day in section.get('days', []):
                 day_num = day['day_number']
-                cal_date = day.get('calendar_date', '')
-                day_of_week = day.get('day_of_week', '')
                 fmt_label = day.get('format_label', 'Training Day')
                 total_h = day.get('total_hours', 0)
 
-                # Day header row
-                if cal_date and day_of_week:
-                    day_header = f"Day {day_num} -- {day_of_week[:3]}, {cal_date} | {fmt_label} | {total_h}h"
-                else:
-                    day_header = f"Day {day_num} | {fmt_label} | {total_h}h"
+                # Day header row (detailed dates removed - only Day N shown)
+                day_header = f"Day {day_num} | {fmt_label} | {total_h}h"
 
                 ws.merge_cells(f'A{row}:{get_column_letter(num_cols)}{row}')
                 cell = ws[f'A{row}']
@@ -1429,34 +1461,30 @@ Return ONLY a valid JSON array with content for each row:
                         if start_min >= 180:
                             lunch_inserted = True
                             ws.cell(row=row, column=1, value='').border = thin_border
-                            date_display = cal_date if cal_date else ''
-                            ws.cell(row=row, column=2, value=date_display).border = thin_border
-                            ws.cell(row=row, column=3, value='12:00 - 12:45').border = thin_border
-                            lunch_cell = ws.cell(row=row, column=4, value='Lunch Break')
+                            ws.cell(row=row, column=2, value='12:00 - 12:45').border = thin_border
+                            lunch_cell = ws.cell(row=row, column=3, value='Lunch Break')
                             lunch_cell.border = thin_border
                             lunch_cell.font = LUNCH_FONT
+                            ws.cell(row=row, column=4, value='').border = thin_border
                             ws.cell(row=row, column=5, value='').border = thin_border
-                            ws.cell(row=row, column=6, value='').border = thin_border
-                            ws.cell(row=row, column=7, value='45 min').border = thin_border
+                            ws.cell(row=row, column=6, value='45 min').border = thin_border
                             for c in range(1, num_cols + 1):
                                 ws.cell(row=row, column=c).alignment = Alignment(horizontal='center')
-                            ws.cell(row=row, column=4).alignment = Alignment(horizontal='left')
+                            ws.cell(row=row, column=3).alignment = Alignment(horizontal='left')
                             row += 1
 
-                    # Module data row
-                    date_display = cal_date if cal_date else ''
-                    level_display = f"L{mod['target_level']} {mod['level_name']}"
+                    # Module data row (Date column removed - columns shifted)
+                    level_display = mod['level_name']
 
                     ws.cell(row=row, column=1, value=f"Day {day_num}").border = thin_border
-                    ws.cell(row=row, column=2, value=date_display).border = thin_border
-                    ws.cell(row=row, column=3, value=f"{start_t} - {end_t}").border = thin_border
-                    ws.cell(row=row, column=4, value=mod['module_name']).border = thin_border
-                    ws.cell(row=row, column=5, value=level_display).border = thin_border
-                    ws.cell(row=row, column=6, value=mod.get('learning_format', '')).border = thin_border
-                    ws.cell(row=row, column=7, value=f"{mod['duration_hours']}h").border = thin_border
+                    ws.cell(row=row, column=2, value=f"{start_t} - {end_t}").border = thin_border
+                    ws.cell(row=row, column=3, value=mod['module_name']).border = thin_border
+                    ws.cell(row=row, column=4, value=level_display).border = thin_border
+                    ws.cell(row=row, column=5, value=mod.get('learning_format', '')).border = thin_border
+                    ws.cell(row=row, column=6, value=f"{mod['duration_hours']}h").border = thin_border
 
                     # Alignment
-                    for c in [1, 2, 3, 5, 7]:
+                    for c in [1, 2, 4, 6]:
                         ws.cell(row=row, column=c).alignment = Alignment(horizontal='center')
 
                     row += 1
@@ -1465,17 +1493,16 @@ Return ONLY a valid JSON array with content for each row:
                 if needs_lunch and not lunch_inserted:
                     lunch_inserted = True
                     ws.cell(row=row, column=1, value='').border = thin_border
-                    ws.cell(row=row, column=2, value=cal_date if cal_date else '').border = thin_border
-                    ws.cell(row=row, column=3, value='12:00 - 12:45').border = thin_border
-                    lunch_cell = ws.cell(row=row, column=4, value='Lunch Break')
+                    ws.cell(row=row, column=2, value='12:00 - 12:45').border = thin_border
+                    lunch_cell = ws.cell(row=row, column=3, value='Lunch Break')
                     lunch_cell.border = thin_border
                     lunch_cell.font = LUNCH_FONT
+                    ws.cell(row=row, column=4, value='').border = thin_border
                     ws.cell(row=row, column=5, value='').border = thin_border
-                    ws.cell(row=row, column=6, value='').border = thin_border
-                    ws.cell(row=row, column=7, value='45 min').border = thin_border
+                    ws.cell(row=row, column=6, value='45 min').border = thin_border
                     for c in range(1, num_cols + 1):
                         ws.cell(row=row, column=c).alignment = Alignment(horizontal='center')
-                    ws.cell(row=row, column=4).alignment = Alignment(horizontal='left')
+                    ws.cell(row=row, column=3).alignment = Alignment(horizontal='left')
                     row += 1
 
             # Section total
@@ -1767,17 +1794,21 @@ Return ONLY a valid JSON array with content for each row:
         # Check if role-clustered view
         is_role_clustered = view_type == 'role_clustered'
 
-        # Sort plans - by cluster for role_clustered, by competency_id otherwise
+        # Sort plans - unified key used across Summary, Training Schedule, and AVIVA Plans.
+        # Includes target_level so lower levels (Understanding) come before higher (Applying).
         if is_role_clustered:
-            # Define cluster order
             cluster_order = {'SE for Engineers': 0, 'SE for Managers': 1, 'SE for Interfacing Partners': 2}
             sorted_plans = sorted(aviva_plans, key=lambda p: (
                 cluster_order.get(p.get('cluster_name', ''), 99),
                 p.get('subcluster') or 'z',  # 'common' before 'pathway'
-                p.get('competency_id', 0)
+                p.get('competency_id', 0),
+                p.get('target_level', 0),
             ))
         else:
-            sorted_plans = sorted(aviva_plans, key=lambda p: p.get('competency_id', 0))
+            sorted_plans = sorted(aviva_plans, key=lambda p: (
+                p.get('competency_id', 0),
+                p.get('target_level', 0),
+            ))
 
         # Module summary headers - different for role-clustered vs competency-level
         if is_role_clustered:
@@ -1881,7 +1912,7 @@ Return ONLY a valid JSON array with content for each row:
         from itertools import groupby
 
         def write_comp_groups_aviva(row_num, section_plans, idx_counter, write_fn):
-            sorted_by_comp = sorted(section_plans, key=lambda p: p.get('competency_id', 0))
+            sorted_by_comp = sorted(section_plans, key=lambda p: (p.get('competency_id', 0), p.get('target_level', 0)))
             for _, grp_iter in groupby(sorted_by_comp, key=lambda p: p.get('competency_id', 0)):
                 grp = list(grp_iter)
                 comp_name = grp[0].get('competency_name', 'Unknown')
@@ -1918,7 +1949,7 @@ Return ONLY a valid JSON array with content for each row:
                     row = write_comp_groups_aviva(row, cluster_plans, idx_counter, write_plan_row_rc)
         else:
             idx_counter = [0]
-            sorted_by_comp = sorted(sorted_plans, key=lambda p: p.get('competency_id', 0))
+            sorted_by_comp = sorted(sorted_plans, key=lambda p: (p.get('competency_id', 0), p.get('target_level', 0)))
             for _, grp_iter in groupby(sorted_by_comp, key=lambda p: p.get('competency_id', 0)):
                 grp = list(grp_iter)
                 comp_name = grp[0].get('competency_name', 'Unknown')
@@ -1935,6 +1966,27 @@ Return ONLY a valid JSON array with content for each row:
         schedule_data = self._generate_daily_schedule(sorted_plans, view_type, milestones)
         ws_schedule = wb.create_sheet(title="Training Schedule", index=1)
         self._write_schedule_sheet(ws_schedule, schedule_data, view_type, milestones=milestones)
+
+        # Build schedule lookup: module_name -> {day_number, start_time, end_time, section_name}
+        # Used to sync AVIVA Plans sheet with Training Schedule.
+        # day_number uses section-local numbering (matching Training Schedule display).
+        # Also build schedule_ordered_names: modules in exact Training Schedule order
+        # (section by section, day by day, module by module) so AVIVA Plans can
+        # list modules in the same sequence.
+        schedule_lookup = {}
+        schedule_ordered_names = []
+        for section in schedule_data.get('schedule_sections', []):
+            section_name = section.get('section_name', '')
+            for day in section.get('days', []):
+                day_num = day['day_number']  # section-local, matches Training Schedule
+                for mod in day.get('modules', []):
+                    schedule_lookup[mod['module_name']] = {
+                        'day_number': day_num,
+                        'section_name': section_name,
+                        'start_time': mod.get('start_time', ''),
+                        'end_time': mod.get('end_time', ''),
+                    }
+                    schedule_ordered_names.append(mod['module_name'])
 
         # ===== THIRD SHEET: ALL AVIVA PLANS COMBINED =====
         ws_aviva = wb.create_sheet(title="AVIVA Plans")
@@ -1964,11 +2016,39 @@ Return ONLY a valid JSON array with content for each row:
         for col, width in enumerate(aviva_col_widths, 1):
             ws_aviva.column_dimensions[get_column_letter(col)].width = width
 
-        # Write each module's AVIVA plan sequentially
+        # Helper: shift an AVIVA activity start_time by offset_minutes
+        def _shift_time(time_str, offset_minutes):
+            """Shift a HH:MM time string by offset_minutes."""
+            try:
+                parts = time_str.split(':')
+                total = int(parts[0]) * 60 + int(parts[1]) + offset_minutes
+                return f"{total // 60:02d}:{total % 60:02d}"
+            except (ValueError, IndexError):
+                return time_str
+
+        SCHEDULE_FONT = Font(bold=True, italic=True, size=10, color='1565C0')
+
+        # Build plan lookup by module_name for schedule-ordered iteration
+        plans_by_name = {}
         for plan in sorted_plans:
+            plans_by_name[plan['module_name']] = plan
+
+        # Write AVIVA plans in exact Training Schedule order (section > day > module).
+        # Fall back to sorted_plans order for any modules not found in schedule.
+        ordered_plan_names = schedule_ordered_names + [
+            p['module_name'] for p in sorted_plans
+            if p['module_name'] not in schedule_lookup
+        ]
+        for plan_name in ordered_plan_names:
+            plan = plans_by_name.get(plan_name)
+            if not plan:
+                continue
             # Module header section
             level_num = plan.get('target_level', 0)
             level_name = LEVEL_NAMES.get(level_num, f'Level {level_num}')
+
+            # Look up schedule info for this module
+            sched_info = schedule_lookup.get(plan['module_name'])
 
             ws_aviva.merge_cells(f'A{aviva_row}:G{aviva_row}')
             cell = ws_aviva[f'A{aviva_row}']
@@ -1977,6 +2057,16 @@ Return ONLY a valid JSON array with content for each row:
             cell.fill = module_header_fill
             cell.alignment = Alignment(horizontal='left', vertical='center')
             aviva_row += 1
+
+            # Schedule reference row (synced with Training Schedule sheet)
+            if sched_info:
+                ws_aviva[f'A{aviva_row}'] = 'Scheduled:'
+                ws_aviva[f'A{aviva_row}'].font = SCHEDULE_FONT
+                ws_aviva.merge_cells(f'B{aviva_row}:G{aviva_row}')
+                sched_cell = ws_aviva[f'B{aviva_row}']
+                sched_cell.value = f"Day {sched_info['day_number']}  |  {sched_info['start_time']} - {sched_info['end_time']}"
+                sched_cell.font = SCHEDULE_FONT
+                aviva_row += 1
 
             # Module details - add Training Program for role-clustered view
             if is_role_clustered and plan.get('cluster_name'):
@@ -2035,10 +2125,27 @@ Return ONLY a valid JSON array with content for each row:
                 cell.alignment = Alignment(horizontal='center', vertical='center')
             aviva_row += 1
 
+            # Compute time offset: shift AVIVA activity times to match
+            # the module's scheduled start in the Training Schedule.
+            # Activities are generated starting at 09:00; if the schedule
+            # says this module starts at e.g. 13:00, offset = +240 min.
+            time_offset_minutes = 0
+            if sched_info and sched_info.get('start_time'):
+                try:
+                    parts = sched_info['start_time'].split(':')
+                    sched_start_min = int(parts[0]) * 60 + int(parts[1])
+                    default_start_min = 9 * 60  # Activities default to 09:00
+                    time_offset_minutes = sched_start_min - default_start_min
+                except (ValueError, IndexError):
+                    time_offset_minutes = 0
+
             # AVIVA activities
             activities = plan.get('activities', [])
             for activity in activities:
-                ws_aviva.cell(row=aviva_row, column=1, value=activity.get('start_time', '')).border = thin_border
+                # Shift start_time to match scheduled position in the day
+                raw_time = activity.get('start_time', '')
+                display_time = _shift_time(raw_time, time_offset_minutes) if time_offset_minutes else raw_time
+                ws_aviva.cell(row=aviva_row, column=1, value=display_time).border = thin_border
                 ws_aviva.cell(row=aviva_row, column=2, value=activity.get('duration_min', 0)).border = thin_border
                 ws_aviva.cell(row=aviva_row, column=3, value=activity.get('type', '')).border = thin_border
                 ws_aviva.cell(row=aviva_row, column=4, value=activity.get('aviva_phase', '')).border = thin_border

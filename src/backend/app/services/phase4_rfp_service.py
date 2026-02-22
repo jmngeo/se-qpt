@@ -1671,7 +1671,7 @@ Return ONLY a JSON array of content strings:
         from itertools import groupby
 
         def write_comp_groups_rfp(row_num, section_modules, idx_counter, write_fn):
-            sorted_by_comp = sorted(section_modules, key=lambda m: m.get('competency_id', m.get('id', 0)))
+            sorted_by_comp = sorted(section_modules, key=lambda m: (m.get('competency_id', m.get('id', 0)), m.get('target_level', 0)))
             for _, grp_iter in groupby(sorted_by_comp, key=lambda m: m.get('competency_id', m.get('id', 0))):
                 grp = list(grp_iter)
                 comp_name = grp[0].get('competency_name', 'Unknown')
@@ -1683,13 +1683,14 @@ Return ONLY a JSON array of content strings:
                     row_num = write_fn(row_num, mod, idx_counter[0])
             return row_num
 
-        # Sort modules
+        # Sort modules - unified key: cluster > subcluster > competency_id > target_level
         if view_type == 'role_clustered':
             cluster_order = {'SE for Engineers': 0, 'SE for Managers': 1, 'SE for Interfacing Partners': 2}
             sorted_modules = sorted(modules, key=lambda m: (
                 cluster_order.get(m.get('cluster_name', ''), 99),
                 m.get('subcluster') or 'z',
-                m.get('competency_id', m.get('id', 0))
+                m.get('competency_id', m.get('id', 0)),
+                m.get('target_level', 0),
             ))
 
             idx_counter = [0]
@@ -1714,7 +1715,7 @@ Return ONLY a JSON array of content strings:
                 else:
                     row = write_comp_groups_rfp(row, cluster_mods, idx_counter, write_module_row_rc)
         else:
-            sorted_modules = sorted(modules, key=lambda m: m.get('competency_id', m.get('id', 0)))
+            sorted_modules = sorted(modules, key=lambda m: (m.get('competency_id', m.get('id', 0)), m.get('target_level', 0)))
             idx_counter = [0]
             for _, grp_iter in groupby(sorted_modules, key=lambda m: m.get('competency_id', m.get('id', 0))):
                 grp = list(grp_iter)

@@ -1,0 +1,106 @@
+Engineering Consulting Firm - Role Descriptions
+===============================================
+
+ROLE: Senior Systems Engineering Consultant
+-------------------------------------------
+Description: Provides expert systems engineering consulting to diverse clients. Leads complex projects and mentors junior consultants.
+
+Responsibilities:
+- Lead systems engineering engagements for clients
+- Conduct systems architecture design and reviews
+- Develop SE processes and tailoring guidance
+- Perform capability assessments and gap analysis
+- Train client teams on SE best practices
+- Support business development and proposals
+
+Required Skills: Systems Engineering, SE Standards (ISO 15288, EIA-632), Consulting, Training, MBSE
+
+
+ROLE: Technical Project Manager
+-------------------------------
+Description: Manages technical consulting projects from initiation to closure. Ensures delivery meets client expectations.
+
+Responsibilities:
+- Plan and manage consulting projects
+- Lead client meetings and workshops
+- Coordinate team resources and deliverables
+- Track project schedule and budget
+- Manage project risks and issues
+- Ensure quality of deliverables
+
+Required Skills: Project Management, Client Management, Technical Leadership, Risk Management, Agile/Traditional PM
+
+
+ROLE: Process Improvement Consultant
+------------------------------------
+Description: Helps organizations improve their engineering processes. Conducts assessments and implements improvement initiatives.
+
+Responsibilities:
+- Conduct process maturity assessments (CMMI, SPICE)
+- Identify process improvement opportunities
+- Develop and deploy improved processes
+- Train staff on new processes
+- Measure process effectiveness
+- Support organizational change management
+
+Required Skills: CMMI, ASPICE, Process Mapping, Change Management, Training, Metrics
+
+
+ROLE: Requirements Management Specialist
+----------------------------------------
+Description: Provides expertise in requirements engineering tools and processes. Implements RM solutions for clients.
+
+Responsibilities:
+- Implement requirements management tools (DOORS, Polarion)
+- Develop requirements processes and templates
+- Train teams on requirements best practices
+- Conduct requirements quality reviews
+- Establish traceability approaches
+- Support tool integration
+
+Required Skills: DOORS, Polarion, Requirements Engineering, Tool Administration, Training
+
+
+ROLE: Model-Based Systems Engineer
+----------------------------------
+Description: Applies model-based methods to systems engineering challenges. Develops and implements MBSE solutions.
+
+Responsibilities:
+- Develop system models using SysML/UML
+- Implement MBSE tools and methods
+- Create modeling standards and libraries
+- Train teams on MBSE practices
+- Conduct model-based reviews
+- Integrate models with other tools
+
+Required Skills: SysML, Cameo/MagicDraw, MBSE Methods, Modeling Standards, Tool Integration
+
+
+ROLE: Safety & Reliability Consultant
+-------------------------------------
+Description: Provides expert guidance on system safety and reliability. Supports clients in meeting safety standards.
+
+Responsibilities:
+- Conduct safety assessments (FHA, FMEA, FTA)
+- Support safety certification activities
+- Perform reliability analysis and predictions
+- Develop safety management plans
+- Train teams on safety methods
+- Review designs for safety compliance
+
+Required Skills: System Safety, FHA/FMEA/FTA, Safety Standards (MIL-STD-882, ISO 26262), Reliability Engineering
+
+
+ROLE: Junior Consultant
+-----------------------
+Description: Supports senior consultants on client engagements. Develops expertise through mentored assignments.
+
+Responsibilities:
+- Support senior consultants on projects
+- Conduct research and analysis
+- Prepare presentations and reports
+- Participate in client meetings
+- Document findings and recommendations
+- Develop technical skills
+
+Required Skills: Technical Background, Communication, Research, Documentation, Teamwork
