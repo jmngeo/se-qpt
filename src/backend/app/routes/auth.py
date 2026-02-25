@@ -91,6 +91,12 @@ def register_admin():
             current_app.logger.error(f"[ADMIN REGISTRATION] Username conflict: {data['username']}")
             return jsonify({'error': error_msg}), 400
 
+        # Check if organization name already exists
+        if Organization.query.filter_by(organization_name=data['organization_name']).first():
+            error_msg = 'Organization name already registered'
+            current_app.logger.error(f"[ADMIN REGISTRATION] Organization name conflict: {data['organization_name']}")
+            return jsonify({'error': error_msg}), 400
+
         # Create organization (using Derik's unified model)
         org_code = Organization.generate_public_key(data['organization_name'])
         organization = Organization(

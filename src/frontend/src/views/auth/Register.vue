@@ -324,7 +324,8 @@ const validatePasswordMatch = (rule, value, callback) => {
 const adminRules = {
   username: [
     { required: true, message: 'Username is required', trigger: 'blur' },
-    { min: 3, message: 'Username must be at least 3 characters', trigger: 'blur' }
+    { min: 3, message: 'Username must be at least 3 characters', trigger: 'blur' },
+    { pattern: /^\S+$/, message: 'Username must not contain spaces', trigger: 'blur' }
   ],
   password: [
     { required: true, message: 'Password is required', trigger: 'blur' },
@@ -367,7 +368,8 @@ const validateEmployeePasswordMatch = (rule, value, callback) => {
 const employeeRules = {
   username: [
     { required: true, message: 'Username is required', trigger: 'blur' },
-    { min: 3, message: 'Username must be at least 3 characters', trigger: 'blur' }
+    { min: 3, message: 'Username must be at least 3 characters', trigger: 'blur' },
+    { pattern: /^\S+$/, message: 'Username must not contain spaces', trigger: 'blur' }
   ],
   password: [
     { required: true, message: 'Password is required', trigger: 'blur' },
