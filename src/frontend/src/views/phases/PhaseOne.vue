@@ -2039,26 +2039,34 @@ const determineCurrentStep = async () => {
   const hasTargetGroup = phase1TargetGroupData.value && phase1TargetGroupData.value.size_range
   const hasStrategies = strategyCompleted.value
 
-  console.log('[Phase1] Determining step - maturity:', hasMaturity, 'targetGroup:', hasTargetGroup, 'strategies:', hasStrategies)
+  // Check if roles were identified (needed for STANDARD pathway)
+  const hasRoles = phase1RolesData.value && phase1RolesData.value.roles?.length > 0
+
+  // Determine if org uses STANDARD pathway (seProcessesValue >= 3)
+  const seProcessesValue = maturityResults.value?.strategyInputs?.seProcessesValue || 0
+  const isStandardPathway = seProcessesValue >= 3
+
+  // Task 2 is fully complete when:
+  // - TASK_BASED pathway: only target group needed (roles are skipped)
+  // - STANDARD pathway: target group AND roles must be identified
+  const isTask2Complete = hasTargetGroup && (!isStandardPathway || hasRoles)
+
+  console.log('[Phase1] Determining step - maturity:', hasMaturity, 'targetGroup:', hasTargetGroup, 'strategies:', hasStrategies, 'roles:', hasRoles, 'standardPathway:', isStandardPathway, 'task2Complete:', isTask2Complete)
 
   // Determine appropriate step based on completion
-  // Note: We check hasTargetGroup instead of hasRoles because:
-  // - Low maturity orgs don't define roles, but DO select target group
-  // - High maturity orgs define roles AND select target group
-  // - So hasTargetGroup is the universal indicator that Task 2 is complete
-  if (hasMaturity && hasTargetGroup && hasStrategies) {
+  if (hasMaturity && isTask2Complete && hasStrategies) {
     // All tasks completed - show Review & Confirm step
     console.log('[Phase1] All tasks complete - going to Review (step 4)')
     currentStep.value = 4
     await loadOrganizationData()
     // Set old archetype completion for backward compatibility
     archetypeCompleted.value = true
-  } else if (hasMaturity && hasTargetGroup) {
-    // Maturity and target group complete, need strategies
-    console.log('[Phase1] Maturity and target group complete - going to Strategy Selection (step 3)')
+  } else if (hasMaturity && isTask2Complete) {
+    // Maturity and Task 2 complete, need strategies
+    console.log('[Phase1] Maturity and Task 2 complete - going to Strategy Selection (step 3)')
     currentStep.value = 3
   } else if (hasMaturity) {
-    // Only maturity complete, need target group selection
+    // Only maturity complete, need role identification / target group
     console.log('[Phase1] Only maturity complete - going to Role Identification (step 2)')
     currentStep.value = 2
   } else {
