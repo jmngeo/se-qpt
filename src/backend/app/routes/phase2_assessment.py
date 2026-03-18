@@ -26,7 +26,7 @@ from models import (
 )
 
 # Import LLM feedback generation
-from app.generate_survey_feedback import generate_feedback_with_llm
+from app.services.generate_survey_feedback import generate_feedback_with_llm
 
 # Create blueprint
 phase2_assessment_bp = Blueprint('phase2_assessment', __name__)

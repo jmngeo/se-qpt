@@ -15,7 +15,8 @@ from datetime import datetime, time, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from openai import OpenAI
 from sqlalchemy import text
-from flask import current_app
+import logging
+logger = logging.getLogger(__name__)
 import io
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
@@ -950,7 +951,7 @@ Return ONLY a valid JSON array with content for each row:
                     act['content'] = f"[{act['aviva_phase']} Activity {row}]"
 
         except Exception as e:
-            current_app.logger.error(f"GenAI content generation failed: {e}")
+            logger.error(f"GenAI content generation failed: {e}")
             # Fallback to placeholder content
             activities = self._add_placeholder_content(
                 activities,
@@ -1686,7 +1687,7 @@ Return ONLY a valid JSON array with content for each row:
             description='Number of employees in the target group to be qualified in SE competencies.')
 
         # Selected Strategies (with descriptions)
-        from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+        from app.services.strategy_selection_engine import SE_TRAINING_STRATEGIES
         strategy_desc_map = {s['name']: s.get('description', '') for s in SE_TRAINING_STRATEGIES}
         strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
 

@@ -26,7 +26,7 @@ from models import (
 
 # Import Phase 2 Task 3 setup function
 import sys
-setup_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'setup'))
+setup_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'setup', 'utils'))
 if setup_path not in sys.path:
     sys.path.insert(0, setup_path)
 from setup_phase2_task3_for_org import setup_phase2_task3_strategies
@@ -55,25 +55,8 @@ def _get_project_root():
 
 
 def _get_pmt_examples_dir():
-    """
-    Get PMT reference examples directory path.
-
-    Path resolution order:
-    1. Local to backend (Docker): src/backend/data/pmt_examples/
-    2. Project root (Local dev): data/PMT/reference_examples/
-    """
-    # Path 1: Docker path (inside backend)
-    docker_path = _get_backend_root() / 'data' / 'pmt_examples'
-    if docker_path.exists():
-        return str(docker_path)
-
-    # Path 2: Local dev path (at project root)
-    dev_path = _get_project_root() / 'data' / 'PMT' / 'reference_examples'
-    if dev_path.exists():
-        return str(dev_path)
-
-    # Return Docker path as default
-    return str(docker_path)
+    """Get PMT reference examples directory path."""
+    return str(_get_backend_root() / 'data' / 'templates' / 'pmt_examples')
 
 
 # ==============================================================================

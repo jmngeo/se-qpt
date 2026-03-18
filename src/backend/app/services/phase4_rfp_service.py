@@ -764,7 +764,7 @@ Return ONLY a JSON array of content strings:
         ).fetchall()
 
         # Use richer descriptions from strategy_selection_engine as fallback
-        from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+        from app.services.strategy_selection_engine import SE_TRAINING_STRATEGIES
         strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
 
         strategies = []
@@ -1276,7 +1276,7 @@ Return ONLY a JSON array of content strings:
         row = write_section_header(row, 'QUALIFICATION STRATEGY')
 
         # Get strategy descriptions
-        from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+        from app.services.strategy_selection_engine import SE_TRAINING_STRATEGIES
         strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
 
         if strategies:
@@ -2309,7 +2309,7 @@ This includes requirements engineering, architectural modelling, test specificat
                 "to guide the design of the training program. Each strategy defines the approach, "
                 "target audience, and qualification depth for different segments of the organization.")
 
-            from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+            from app.services.strategy_selection_engine import SE_TRAINING_STRATEGIES
             strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
 
             for s in strategies:

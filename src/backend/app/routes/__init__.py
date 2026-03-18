@@ -56,7 +56,7 @@ from models import (
 )
 
 # Import services
-from app.generate_survey_feedback import generate_feedback_with_llm
+from app.services.generate_survey_feedback import generate_feedback_with_llm
 from app.services.role_cluster_mapping_service import RoleClusterMappingService
 from app.services.custom_role_matrix_generator import CustomRoleMatrixGenerator
 

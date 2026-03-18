@@ -48,7 +48,7 @@ from app.services.role_cluster_mapping_service import RoleClusterMappingService
 from app.services.custom_role_matrix_generator import CustomRoleMatrixGenerator
 
 # Import helper functions
-from app.most_similar_role import find_most_similar_role_cluster
+from app.services.most_similar_role import find_most_similar_role_cluster
 
 # Create blueprint
 phase1_roles_bp = Blueprint('phase1_roles', __name__)

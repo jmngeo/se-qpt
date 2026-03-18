@@ -592,7 +592,7 @@ def export_phase3_excel(organization_id):
         else: maturity_level = 1
 
         # Get strategy descriptions for selected strategies
-        from app.strategy_selection_engine import SE_TRAINING_STRATEGIES
+        from app.services.strategy_selection_engine import SE_TRAINING_STRATEGIES
         strategy_desc_map = {s['name']: s.get('description', '') for s in SE_TRAINING_STRATEGIES}
         strategy_detail_map = {s['name']: s for s in SE_TRAINING_STRATEGIES}
 

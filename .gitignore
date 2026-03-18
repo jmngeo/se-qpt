@@ -126,6 +126,9 @@ data/rag_vectordb/*.parquet
 data/rag_vectordb/chroma/
 # data/large_datasets/  # Uncomment if you have large datasets folder
 
+# Database backups (large files, not for version control)
+backups/
+
 # Backup files (but keep important code backups)
 *~
 *.bak

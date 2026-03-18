@@ -84,7 +84,7 @@ def create_app(config_name='development'):
     from app.routes.phase3_planning import phase3_planning_bp
     from app.routes.phase4_aviva import phase4_aviva_bp
     from app.routes.main import main_bp
-    from app.competency_service import competency_service_bp
+    from app.services.competency_service import competency_service_bp
 
     # Register all blueprints under /api prefix
     app.register_blueprint(auth_bp, url_prefix='/api')
@@ -113,7 +113,7 @@ def create_app(config_name='development'):
 
     # Import Derik's routes - Enable competency assessor integration
     try:
-        from app.derik_integration import derik_bp
+        from app.services.derik_integration import derik_bp
         app.register_blueprint(derik_bp, url_prefix='/api/derik')
         print("Derik's competency assessor integration enabled (bridge routes only)")
     except Exception as e:

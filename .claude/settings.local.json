@@ -84,7 +84,20 @@
       "Bash(powershell -Command:*)",
       "Bash(powershell -ExecutionPolicy Bypass -File create_zip.ps1:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(npx vite build)"
+      "Bash(npx vite build)",
+      "Bash(find /c/Users/jomon/Documents/MyDocuments/Development/Thesis/SE-QPT-Master-Thesis -type f \\\\\\( -name \"*.py\" -o -name \"*.vue\" -o -name \"*.js\" \\\\\\) 2>/dev/null | head -50)",
+      "Bash(py -3.12 --version)",
+      "Bash(py -3.14 --version)",
+      "Bash(find /d/Code/SE-QPT-Master-Thesis/data -type f \\\\\\(-name *.json -o -name *.md -o -name *.txt -o -name *.pdf -o -name *.xlsx -o -name *.csv -o -name *.docx \\\\\\))",
+      "Bash(cd:*)",
+      "Bash(sed -i 's/from app\\\\.generate_survey_feedback import/from app.services.generate_survey_feedback import/g' D:/Code/SE-QPT-Master-Thesis/src/backend/app/routes/phase2_assessment.py)",
+      "Bash(sed -i 's/from app\\\\.strategy_selection_engine import/from app.services.strategy_selection_engine import/g' D:/Code/SE-QPT-Master-Thesis/src/backend/app/routes/phase1_strategies.py)",
+      "Bash(sed -i 's/from app\\\\.strategy_selection_engine import/from app.services.strategy_selection_engine import/g' D:/Code/SE-QPT-Master-Thesis/src/backend/app/routes/phase3_planning.py)",
+      "Bash(sed -i 's/from app\\\\.strategy_selection_engine import/from app.services.strategy_selection_engine import/g' D:/Code/SE-QPT-Master-Thesis/src/backend/app/services/phase4_aviva_service.py)",
+      "Bash(sed -i 's/from app\\\\.strategy_selection_engine import/from app.services.strategy_selection_engine import/g' D:/Code/SE-QPT-Master-Thesis/src/backend/app/services/phase4_rfp_service.py)",
+      "Bash(sed -i \"s|SE-QPT-Master-Thesis/.ssh/zangetsu\\\\` \\(private key\\)|~/.ssh/zangetsu_seqpt\\\\` \\(private key\\)|g\" \"C:/Users/ichig/.claude/CLAUDE.md\")",
+      "Bash(sed -i \"s|SE-QPT-Master-Thesis/.ssh/zangetsu.pub\\\\`|~/.ssh/zangetsu_seqpt.pub\\\\`|g\" \"C:/Users/ichig/.claude/CLAUDE.md\")",
+      "Bash(sed -i \"s|ssh -i .ssh/zangetsu root@|ssh -i ~/.ssh/zangetsu_seqpt root@|g\" \"C:/Users/ichig/.claude/CLAUDE.md\")"
     ],
     "deny": [],
     "ask": []

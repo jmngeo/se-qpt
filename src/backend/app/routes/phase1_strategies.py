@@ -19,7 +19,7 @@ import json
 from sqlalchemy import text
 
 from models import db, User, Organization, LearningStrategy, PhaseQuestionnaireResponse
-from app.strategy_selection_engine import StrategySelectionEngine, SE_TRAINING_STRATEGIES
+from app.services.strategy_selection_engine import StrategySelectionEngine, SE_TRAINING_STRATEGIES
 
 # Create blueprint
 phase1_strategies_bp = Blueprint('phase1_strategies', __name__)
