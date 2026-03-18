@@ -1,116 +1,101 @@
 # SE-QPT: Systems Engineering Qualification Planning Tool
 
-A web-based tool for assessing and planning competency development for Systems Engineering roles based on ISO/IEC/IEEE 15288 standards.
-
 ## Overview
 
-SE-QPT helps organizations and individuals:
-- Identify appropriate SE roles based on task descriptions
-- Assess competency levels against 16 core SE competencies
-- Generate personalized training recommendations
-- Track competency development over time
+This thesis presents the development of a Systems Engineering Qualification Planning Tool - a GenAI-powered web platform that enables organizations to systematically plan Systems Engineering qualifications. The tool integrates maturity assessment, AI-enhanced role mapping, and RAG-based learning objective generation to bridge the gap between SE competency frameworks and practical qualification implementation.
+
+The tool guides organizations through a structured four-phase process:
+
+1. **Phase 1 – Prepare SE Training**: Assess organizational maturity and identify SE roles based on job tasks
+2. **Phase 2 – Identify Requirements and Competencies**: Identify required competency levels through expert and self-assessments
+3. **Phase 3 – Macro Planning**: Create a macro-level training plan with learning formats and scheduling
+4. **Phase 4 – Micro Planning**: Develop detailed micro-level implementation plans
 
 ## Technology Stack
 
 ### Backend
-- **Framework**: Flask (Python)
-- **Database**: PostgreSQL
-- **AI/ML**: OpenAI GPT-4 for task-to-role mapping
-- **Vector Search**: FAISS for competency matching
+- **Framework**: Flask 3.0 (Python)
+- **Database**: PostgreSQL 15
+- **ORM**: SQLAlchemy 2.0 + Flask-Migrate
+- **Auth**: Flask-JWT-Extended
+- **AI/ML**: LangChain + OpenAI GPT-4 for role mapping and learning objective generation
+- **Vector Search**: FAISS for competency vector matching
+- **RAG**: ChromaDB for context-aware learning objective retrieval
 
 ### Frontend
-- **Framework**: Vue 3 + Composition API
-- **UI Library**: Vuetify 3
+- **Framework**: Vue 3 (Composition API)
+- **UI Library**: Element Plus
 - **State Management**: Pinia
+- **Charts**: ECharts (vue-echarts), Chart.js
+- **Export**: jsPDF + xlsx
 - **Build Tool**: Vite
 
-## Architecture
-
-### Core Matrices (3-Matrix System)
-
-```
-1. ROLE_PROCESS_MATRIX (Customizable per organization)
-   - 14 SE Roles × 28 ISO Processes
-   - Values: 0-4 (involvement level)
-   - Defines which processes each role performs
-
-2. PROCESS_COMPETENCY_MATRIX (Global/Fixed)
-   - 28 ISO Processes × 16 Competencies
-   - Values: 0-1 (binary requirement)
-   - Based on ISO/IEC/IEEE 15288 standards
-
-3. ROLE_COMPETENCY_MATRIX (Auto-calculated)
-   - 14 SE Roles × 16 Competencies
-   - Values: 0-6 (required proficiency level)
-   - Calculated: Role_Process × Process_Competency
-```
-
-### Role Identification Approach
-
-SE-QPT uses a **hybrid dual-method** for accurate role matching:
-
-1. **LLM Direct Selection** (Primary)
-   - Semantic analysis of task descriptions
-   - Context-aware role identification
-   - 100% accuracy in validation tests
-
-2. **Euclidean Distance** (Fallback/Validation)
-   - Mathematical competency vector comparison
-   - Fast and deterministic
-   - Provides confidence scores
-
-See `docs/reference/HYBRID_ROLE_SELECTION_APPROACH.md` for details.
+### Infrastructure
+- **Containerization**: Docker + Docker Compose
+- **Web Server**: Nginx (reverse proxy + static file serving)
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.9+
-- PostgreSQL 12+
-- Node.js 16+
-- npm 8+
-
-### 1. Clone Repository
+### Option A: Docker (Recommended)
 
 ```bash
 git clone <repository-url>
 cd SE-QPT-Master-Thesis
+
+# Create environment file
+cp .env.example .env
+# Edit .env — set OPENAI_API_KEY and a strong SECRET_KEY
+
+# Start all services
+docker compose up --build -d
+
+# Initialize the database (first time only)
+docker exec seqpt-backend python setup/core/init_db_as_postgres.py
+docker exec seqpt-backend python setup/populate/populate_competencies.py
+docker exec seqpt-backend python setup/populate/populate_iso_processes.py
+docker exec seqpt-backend python setup/populate/populate_roles_and_matrices.py
+docker exec seqpt-backend python setup/populate/populate_process_competency_matrix.py
+docker exec seqpt-backend python setup/database_objects/create_stored_procedures.py
 ```
 
-### 2. Database Setup
+Application is available at `http://localhost`.
+
+### Option B: Manual Setup
+
+#### Prerequisites
+- Python 3.10+
+- PostgreSQL 15+
+- Node.js 18+
+
+#### 1. Database Setup
 
 ```bash
-# Create database and user
-createdb -U postgres seqpt_database
-psql -U postgres -c "CREATE USER seqpt_admin WITH PASSWORD 'SeQpt_2025';"
+psql -U postgres -c "CREATE USER seqpt_admin WITH PASSWORD 'your_password';"
+psql -U postgres -c "CREATE DATABASE seqpt_database OWNER seqpt_admin;"
 psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE seqpt_database TO seqpt_admin;"
 ```
 
-### 3. Backend Setup
+#### 2. Backend Setup
 
 ```bash
 cd src/backend
 
-# Create virtual environment
 python -m venv ../../venv
-../../venv/Scripts/activate  # Windows
-source ../../venv/bin/activate  # Linux/Mac
+# Windows:
+../../venv/Scripts/activate
+# Linux/Mac:
+# source ../../venv/bin/activate
 
-# Install dependencies
 pip install -r requirements.txt
 
-# Configure environment
 cp .env.example .env
 # Edit .env with your DATABASE_URL and OPENAI_API_KEY
 ```
 
-### 4. Initialize Database
-
-See `DATABASE_INITIALIZATION_GUIDE.md` for detailed instructions.
+#### 3. Initialize Database
 
 ```bash
-# Quick setup (run in order)
-cd src/backend
+# Run in order from src/backend/
 python setup/core/init_db_as_postgres.py
 python setup/populate/populate_competencies.py
 python setup/populate/populate_iso_processes.py
@@ -119,26 +104,23 @@ python setup/populate/populate_process_competency_matrix.py
 python setup/database_objects/create_stored_procedures.py
 ```
 
-### 5. Frontend Setup
+#### 4. Frontend Setup
 
 ```bash
 cd src/frontend
 npm install
 ```
 
-### 6. Run Application
+#### 5. Run
 
 ```bash
-# Terminal 1 - Backend
+# Terminal 1 — Backend (http://localhost:5000)
 cd src/backend
-../../venv/Scripts/activate
 python run.py
-# Runs on http://localhost:5000
 
-# Terminal 2 - Frontend
+# Terminal 2 — Frontend (http://localhost:3000)
 cd src/frontend
 npm run dev
-# Runs on http://localhost:8080
 ```
 
 ## Project Structure
@@ -146,157 +128,115 @@ npm run dev
 ```
 SE-QPT-Master-Thesis/
 ├── src/
-│   ├── backend/              # Flask backend
-│   │   ├── app/             # Application code
-│   │   │   ├── routes.py    # Main API endpoints
-│   │   │   ├── services/    # Business logic
-│   │   │   └── ...
-│   │   ├── models.py        # SQLAlchemy models
-│   │   ├── run.py           # Application entry point
-│   │   ├── setup/           # Database setup scripts
-│   │   │   ├── core/        # DB initialization
-│   │   │   ├── populate/    # Reference data
-│   │   │   └── ...
-│   │   └── archive/         # Historical/debug scripts
+│   ├── backend/
+│   │   ├── app/
+│   │   │   ├── routes/          # API route blueprints
+│   │   │   ├── services/        # Business logic
+│   │   │   └── utils/           # Helpers and utilities
+│   │   ├── config/              # App configuration
+│   │   ├── data/                # Static data (PMT examples, templates)
+│   │   ├── migrations/          # Alembic DB migrations
+│   │   ├── setup/               # Database initialization scripts
+│   │   │   ├── core/            # DB creation and schema init
+│   │   │   ├── populate/        # Reference data population
+│   │   │   ├── database_objects/# Stored procedures and triggers
+│   │   │   └── ui_data/         # UI-specific seed data
+│   │   ├── tests/               # Backend test suite
+│   │   ├── models.py            # SQLAlchemy models
+│   │   ├── run.py               # Application entry point
+│   │   └── requirements.txt     # Python dependencies
 │   │
-│   └── frontend/            # Vue 3 frontend
+│   └── frontend/
 │       ├── src/
-│       │   ├── views/       # Page components
-│       │   ├── components/  # Reusable components
-│       │   ├── stores/      # Pinia state stores
-│       │   └── api/         # API client
-│       └── ...
+│       │   ├── views/           # Page components (phases, plans, admin)
+│       │   ├── components/      # Reusable UI components
+│       │   ├── stores/          # Pinia state stores
+│       │   ├── api/             # Axios API client
+│       │   └── router/          # Vue Router configuration
+│       ├── package.json
+│       └── vite.config.js
 │
-├── data/                    # Reference data
-├── docs/                    # Documentation
-│   ├── reference/           # Technical references
-│   └── archive/             # Historical documentation
-├── venv/                    # Python virtual environment
-├── DATABASE_INITIALIZATION_GUIDE.md
-├── NEW_MACHINE_SETUP_GUIDE.md
-├── SESSION_HANDOVER.md      # Session continuity tracking
-└── README.md               # This file
+├── docker-compose.yml           # Production container orchestration
+├── .env.example                 # Environment variable template
+└── README.md
 ```
-
-## Key Features
-
-### Phase 1: Role Identification
-- Task-based role mapping using LLM
-- Standard role selection from 14 SE role clusters
-- Target group size configuration
-
-### Phase 2: Competency Assessment
-- Assessment of 16 SE competencies
-- Integration with role-specific requirements
-- Maturity level evaluation (0-6 scale)
-
-### Phase 3: Training Recommendations
-- Personalized learning paths
-- Module library integration
-- Gap analysis and prioritization
-
-## Documentation
-
-### Essential Guides
-- `DATABASE_INITIALIZATION_GUIDE.md` - Complete database setup reference
-- `NEW_MACHINE_SETUP_GUIDE.md` - First-time environment setup
-- `SESSION_HANDOVER.md` - Development session history and context
-
-### Technical References
-- `docs/reference/HYBRID_ROLE_SELECTION_APPROACH.md` - Role matching methodology
-- `docs/reference/MATRIX_CALCULATION_PATTERN.md` - Matrix calculation logic
-- `docs/reference/DERIK_INTEGRATION_ANALYSIS.md` - Integration architecture
-- `docs/reference/TASK_BASED_ROLE_MATCHING_SOLUTION.md` - Task analysis approach
-
-### Archived Documentation
-- `docs/archive/cleanup/` - Codebase refactoring history
-- `docs/archive/features/` - Feature implementation summaries
-- `docs/archive/fixes/` - Bug fix analyses
-- `docs/archive/migrations/` - One-time migration documentation
-- `docs/archive/planning/` - Completed planning documents
-
-## Database Schema
-
-### Core Tables
-- `competency` - 16 SE competencies
-- `iso_process` - 28 ISO/IEC/IEEE 15288 processes
-- `role_cluster` - 14 SE role definitions
-- `organization` - Multi-tenant support
-
-### Matrix Tables
-- `role_process_matrix` - Role-to-process involvement levels
-- `process_competency_matrix` - Process-to-competency requirements
-- `role_competency_matrix` - Calculated role competency requirements
-
-### User & Assessment Tables
-- `user` - User accounts and profiles
-- `assessment` - Competency assessment records
-- `assessment_history` - Assessment tracking over time
 
 ## Environment Variables
 
+Copy `.env.example` to `.env` and configure:
+
 ```bash
 # Database
-DATABASE_URL=postgresql://seqpt_admin:SeQpt_2025@localhost:5432/seqpt_database
+POSTGRES_USER=seqpt_admin
+POSTGRES_PASSWORD=your_secure_password_here
+POSTGRES_DB=seqpt_database
 
 # Flask
-FLASK_APP=run.py
-FLASK_DEBUG=1
-SECRET_KEY=your-secret-key-here
+FLASK_ENV=production
+SECRET_KEY=your_secret_key_here
 
-# OpenAI
-OPENAI_API_KEY=your-openai-api-key
+# OpenAI (required for LLM features)
+OPENAI_API_KEY=sk-your-openai-api-key-here
 ```
 
-## Development Notes
+For local development, the backend also reads `src/backend/.env`:
 
-### Windows-Specific Considerations
-- This project runs on Windows OS
-- Use Windows-compatible path separators: `\` (though `/` often works)
-- Console encoding is `charmap` (cp1252) - avoid Unicode/emoji in logs
-- Flask hot-reload may not work reliably - restart server manually
+```bash
+DATABASE_URL=postgresql://seqpt_admin:your_password@localhost:5432/seqpt_database
+FLASK_APP=run.py
+FLASK_DEBUG=1
+SECRET_KEY=dev-secret-key
+OPENAI_API_KEY=sk-your-openai-api-key-here
+```
 
-### Important Guidelines
-1. **Always check SESSION_HANDOVER.md first** when starting a new session
-2. **Restart Flask server manually** after code changes (hot-reload unreliable)
-3. **Never use emojis** in code/logs (encoding issues)
-4. **Reference Derik's implementation** for competency assessment logic
+## Database Schema
 
-### Common Issues
+### Core Reference Tables
+- `organization` — Multi-tenant organizations
+- `competency` / `competency_indicators` — SE competency definitions
+- `iso_system_life_cycle_processes` / `iso_processes` — ISO 15288 process hierarchy
+- `role_cluster` — Standard SE role definitions
 
-See `DATABASE_INITIALIZATION_GUIDE.md` for detailed troubleshooting, including:
-- 404 on survey submission (trigger issues)
-- All competency scores showing 0 or 6 (insufficient task input)
-- Empty max_scores array (stored procedure verification)
-- Unicode errors (emoji usage)
+### Matrix Tables
+- `role_process_matrix` — Role-to-process involvement levels (per org)
+- `process_competency_matrix` — Process-to-competency requirements (global)
+- `role_competency_matrix` — Calculated required proficiency per role
+- `unknown_role_process_matrix` / `unknown_role_competency_matrix` — For task-based custom roles
 
-## Testing
+### Assessment & Planning Tables
+- `users` — User accounts
+- `user_role_cluster` — Identified role per user
+- `user_se_competency_survey_results` — Phase 2 assessment results
+- `user_assessment` — Assessment records
+- `learning_strategy` / `strategy_template` — Training strategy definitions
+- `generated_learning_objectives` — AI-generated LOs per user
+- `organization_existing_trainings` — Org-provided training catalogue
 
-### Validation Test Profiles
-Located in `docs/archive/` (removed from root):
-- Test profiles validate role matching accuracy
-- 100% accuracy achieved with LLM-based approach
+## Production Deployment
 
-## Contributing
+The application is containerized and runs on Docker. The `docker-compose.yml` defines three services: `db` (PostgreSQL), `backend` (Flask), and `frontend` (Nginx + Vue build).
 
-When contributing:
-1. Check `SESSION_HANDOVER.md` for latest session context
-2. Update `SESSION_HANDOVER.md` with your changes
-3. Follow existing code patterns and architecture
-4. Test on Windows environment
-5. Avoid Unicode characters in code
+```bash
+# Deploy
+docker compose up --build -d
+
+# View logs
+docker compose logs -f
+
+# Check status
+docker compose ps
+```
+
+Nginx proxies all `/api/` requests to the Flask backend; all other requests serve the Vue SPA.
 
 ## License
 
-[Add license information]
+This project is developed as part of a Master's thesis at Paderborn university, Germany.
 
-## Authors
+## Author
 
-- Jomon [Student]
-- Based on original work by Derik
+Jomon George
 
-## Acknowledgments
+## Contact
 
-- ISO/IEC/IEEE 15288 Systems Engineering Standards
-- OpenAI GPT-4 for semantic role matching
-- FAISS for efficient vector similarity search
+For any questions or further information, please contact Jomon George at jomon.mec@gmail.com or my thesis supervisor Ulf Könemann (ulf.koenemann@iem.fraunhofer.de).
