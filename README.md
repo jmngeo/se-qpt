@@ -236,7 +236,3 @@ This project is developed as part of a Master's thesis at Paderborn university, 
 ## Author
 
 Jomon George
-
-## Contact
-
-For any questions or further information, please contact Jomon George at jomon.mec@gmail.com or my thesis supervisor Ulf Könemann (ulf.koenemann@iem.fraunhofer.de).
